@@ -1,0 +1,152 @@
+{
+	"$schema": "https://schemas.elgato.com/streamdeck/plugins/manifest.json",
+	"Name": "Teams Controls",
+	"Version": "0.1.0.0",
+	"Author": "Michael Palermiti",
+	"Description": "Meeting controls for Microsoft Teams with live state on every key: mute, camera, blur, hand, reactions, chat, share, leave.",
+	"UUID": "ai.michaelp.teams",
+	"Category": "Teams Controls",
+	"CategoryIcon": "imgs/plugin/category-icon",
+	"Icon": "imgs/plugin/marketplace",
+	"CodePath": "bin/plugin.js",
+	"SDKVersion": 3,
+	"Software": {
+		"MinimumVersion": "7.1"
+	},
+	"OS": [
+		{
+			"Platform": "mac",
+			"MinimumVersion": "12"
+		},
+		{
+			"Platform": "windows",
+			"MinimumVersion": "10"
+		}
+	],
+	"Nodejs": {
+		"Version": "24"
+	},
+	"Actions": [
+		{
+			"Name": "Mute",
+			"UUID": "ai.michaelp.teams.mute",
+			"Icon": "imgs/actions/mute/icon",
+			"Tooltip": "Toggle your microphone. Lit while your mic is live.",
+			"Controllers": [
+				"Keypad"
+			],
+			"States": [
+				{
+					"Image": "imgs/actions/mute/key",
+					"ShowTitle": false
+				}
+			]
+		},
+		{
+			"Name": "Camera",
+			"UUID": "ai.michaelp.teams.camera",
+			"Icon": "imgs/actions/camera/icon",
+			"Tooltip": "Toggle your camera. Lit while it is on.",
+			"Controllers": [
+				"Keypad"
+			],
+			"States": [
+				{
+					"Image": "imgs/actions/camera/key",
+					"ShowTitle": false
+				}
+			]
+		},
+		{
+			"Name": "Background blur",
+			"UUID": "ai.michaelp.teams.blur",
+			"Icon": "imgs/actions/blur/icon",
+			"Tooltip": "Toggle background blur. Lit while blurred.",
+			"Controllers": [
+				"Keypad"
+			],
+			"States": [
+				{
+					"Image": "imgs/actions/blur/key",
+					"ShowTitle": false
+				}
+			]
+		},
+		{
+			"Name": "Raise hand",
+			"UUID": "ai.michaelp.teams.hand",
+			"Icon": "imgs/actions/hand/icon",
+			"Tooltip": "Raise or lower your hand. Lit while raised.",
+			"Controllers": [
+				"Keypad"
+			],
+			"States": [
+				{
+					"Image": "imgs/actions/hand/key",
+					"ShowTitle": false
+				}
+			]
+		},
+		{
+			"Name": "Leave",
+			"UUID": "ai.michaelp.teams.leave",
+			"Icon": "imgs/actions/leave/icon",
+			"Tooltip": "Leave the meeting. Red while you are in one.",
+			"Controllers": [
+				"Keypad"
+			],
+			"States": [
+				{
+					"Image": "imgs/actions/leave/key",
+					"ShowTitle": false
+				}
+			]
+		},
+		{
+			"Name": "React",
+			"UUID": "ai.michaelp.teams.react",
+			"Icon": "imgs/actions/react/icon",
+			"Tooltip": "Send a reaction to the meeting.",
+			"Controllers": [
+				"Keypad"
+			],
+			"PropertyInspectorPath": "ui/react.html",
+			"States": [
+				{
+					"Image": "imgs/actions/react/key",
+					"ShowTitle": false
+				}
+			]
+		},
+		{
+			"Name": "Chat",
+			"UUID": "ai.michaelp.teams.chat",
+			"Icon": "imgs/actions/chat/icon",
+			"Tooltip": "Open or close meeting chat. Lit when there are unread messages.",
+			"Controllers": [
+				"Keypad"
+			],
+			"States": [
+				{
+					"Image": "imgs/actions/chat/key",
+					"ShowTitle": false
+				}
+			]
+		},
+		{
+			"Name": "Share",
+			"UUID": "ai.michaelp.teams.share",
+			"Icon": "imgs/actions/share/icon",
+			"Tooltip": "Open the share tray, or stop sharing while you are presenting. Lit while sharing.",
+			"Controllers": [
+				"Keypad"
+			],
+			"States": [
+				{
+					"Image": "imgs/actions/share/key",
+					"ShowTitle": false
+				}
+			]
+		}
+	]
+}
