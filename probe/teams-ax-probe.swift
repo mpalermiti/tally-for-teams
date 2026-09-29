@@ -11,6 +11,9 @@
 //   swift probe/teams-ax-probe.swift --press-test   press Mute twice (toggles your mic, then restores it)
 //   swift probe/teams-ax-probe.swift --full         also save every button's label (may include people's names)
 //
+// If Teams hides its controls, the probe tries the switches screen readers use to turn
+// Teams' accessibility on, and prints a roles-only skeleton of where the tree stops.
+//
 // First run: macOS asks for Accessibility permission for your terminal app.
 // Grant it in System Settings → Privacy & Security → Accessibility, then run again.
 //
@@ -216,19 +219,72 @@ print("✓ Found \(app.localizedName ?? "Teams") \(version) (\(app.bundleIdentif
 
 let axApp = AXUIElementCreateApplication(app.processIdentifier)
 AXUIElementSetMessagingTimeout(axApp, 2.0)
-// Web-based apps (Chromium/Electron/WebView) often build their accessibility tree only when
-// asked. This is the same switch screen readers flip; it's harmless and resets when Teams quits.
-AXUIElementSetAttributeValue(axApp, "AXManualAccessibility" as CFString, kCFBooleanTrue)
-Thread.sleep(forTimeInterval: 0.5)
-
-// MARK: - 3. Scan
-
-var first = scan(axApp)
-if first.controls.filter({ !$0.0.capabilities.isEmpty }).isEmpty {
-	// Some web views only populate after a second request.
-	Thread.sleep(forTimeInterval: 1.5)
-	first = scan(axApp)
+var diagnostics: [String] = []
+func note(_ line: String) {
+	print("  \(line)")
+	diagnostics.append(line)
 }
+
+// What renders Teams' UI decides which "turn accessibility on" switch it listens to.
+let frameworks = app.bundleURL
+	.map { $0.appendingPathComponent("Contents/Frameworks") }
+	.flatMap { try? FileManager.default.contentsOfDirectory(atPath: $0.path) } ?? []
+let engines = frameworks.filter { name in
+	["edge", "webview", "chromium", "electron", "cef", "webkit"].contains { name.lowercased().contains($0) }
+}
+note("UI engine frameworks: \(engines.isEmpty ? "none recognised (\(frameworks.count) frameworks)" : engines.joined(separator: ", "))")
+
+/// Scans repeatedly until the node count stops growing: web views build their tree asynchronously.
+func settledScan(timeout: TimeInterval = 6) -> Scan {
+	var current = scan(axApp)
+	let deadline = Date().addingTimeInterval(timeout)
+	while Date() < deadline {
+		Thread.sleep(forTimeInterval: 0.75)
+		let next = scan(axApp)
+		if next.nodes <= current.nodes && current.nodes > 200 { return next }
+		current = next
+	}
+	return current
+}
+
+// Try the least invasive switch first:
+//   AXManualAccessibility  — Electron's opt-in
+//   AXEnhancedUserInterface — what VoiceOver sets; Chromium and WebKit views respond to it.
+// Both are what screen readers do, and both reset when Teams quits (Enhanced is also reset at exit below).
+var first = scan(axApp)
+note("as found: \(first.nodes) nodes")
+let enhancedBefore = (value(axApp, "AXEnhancedUserInterface") as? NSNumber)?.boolValue
+var setEnhanced = false
+for switchName in ["AXManualAccessibility", "AXEnhancedUserInterface"] {
+	if first.controls.contains(where: { !$0.0.capabilities.isEmpty }) { break }
+	let error = AXUIElementSetAttributeValue(axApp, switchName as CFString, kCFBooleanTrue)
+	if switchName == "AXEnhancedUserInterface" && error == .success { setEnhanced = true }
+	first = settledScan()
+	note("after \(switchName) (set → \(error == .success ? "ok" : "AXError \(error.rawValue)")): \(first.nodes) nodes")
+}
+func restoreEnhanced() {
+	if setEnhanced && enhancedBefore != true {
+		AXUIElementSetAttributeValue(axApp, "AXEnhancedUserInterface" as CFString, kCFBooleanFalse)
+	}
+}
+
+/// Roles and child counts only (no labels), to show where the tree stops.
+func skeleton(_ element: AXUIElement, depth: Int = 0, maxDepth: Int = 7, into lines: inout [String]) {
+	guard lines.count < 60 else { return }
+	let kids = children(element)
+	let role = string(element, kAXRoleAttribute) ?? "?"
+	let sub = string(element, kAXSubroleAttribute).map { "/\($0)" } ?? ""
+	lines.append(String(repeating: "  ", count: depth) + "\(role)\(sub)" + (kids.isEmpty ? "" : " (\(kids.count))"))
+	if depth < maxDepth { for kid in kids { skeleton(kid, depth: depth + 1, maxDepth: maxDepth, into: &lines) } }
+}
+if !first.controls.contains(where: { !$0.0.capabilities.isEmpty }) {
+	var lines: [String] = []
+	for window in (value(axApp, kAXWindowsAttribute) as? [AXUIElement]) ?? [] { skeleton(window, into: &lines) }
+	print("\n  Tree skeleton (roles only):")
+	for line in lines { print("    \(line)") }
+	diagnostics.append(contentsOf: lines.map { "skeleton: \($0)" })
+}
+
 let frontmost = NSWorkspace.shared.frontmostApplication?.bundleIdentifier == app.bundleIdentifier
 print("  \(first.windows) window(s), \(first.nodes) accessibility nodes scanned in \(Int(first.milliseconds)) ms" +
 	(first.truncated ? " (stopped at the node limit)" : "") + (frontmost ? "" : " — Teams is in the background ✓"))
@@ -271,6 +327,7 @@ struct Report: Codable {
 	var scanMilliseconds: Int
 	var roleCounts: [String: Int]
 	var found: [String: Bool]
+	var diagnostics: [String]
 	var controls: [Control]
 }
 let stamp = ISO8601DateFormatter().string(from: Date())
@@ -284,6 +341,7 @@ let report = Report(
 	scanMilliseconds: Int(first.milliseconds),
 	roleCounts: first.roleCounts,
 	found: found,
+	diagnostics: diagnostics,
 	controls: first.controls.map(\.0).filter { fullDump || !$0.capabilities.isEmpty }
 )
 let downloads = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask)[0]
@@ -298,6 +356,7 @@ print("\nSaved report: \(file.path)" + (fullDump ? "  (--full: contains every bu
 if pressTest {
 	guard let (control, element) = best("mute", in: first) else {
 		print("\nPress test skipped: no pressable mute control found.")
+		restoreEnhanced()
 		exit(1)
 	}
 	func reread() -> String { label(describe(element, role: control.role, window: control.window, depth: control.depth)) }
@@ -314,7 +373,13 @@ if pressTest {
 
 // MARK: - 6. Optional: watch
 
+if !watchMode { restoreEnhanced() }
+
 if watchMode {
+	signal(SIGINT, SIG_IGN)
+	let interrupt = DispatchSource.makeSignalSource(signal: SIGINT, queue: .global())
+	interrupt.setEventHandler { restoreEnhanced(); exit(0) }
+	interrupt.resume()
 	print("\nWatching mic, camera and hand every 0.5 s. Change them in Teams (or with ⌘⇧M) and watch for updates. Ctrl-C to stop.")
 	var last = ""
 	while true {
