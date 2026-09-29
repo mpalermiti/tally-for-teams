@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { Snapshot } from "../src/teams/client";
 import { EMPTY_STATE, NO_PERMISSIONS, type MeetingPermissions, type MeetingState } from "../src/teams/protocol";
-import { KEY_KINDS, keySvg, visualFor } from "../src/render/key";
+import { KEY_KINDS, keySvg, muteDialFeedback, visualFor } from "../src/render/key";
 
 const ALL_ALLOWED = Object.fromEntries(Object.keys(NO_PERMISSIONS).map((k) => [k, true])) as unknown as MeetingPermissions;
 
@@ -83,5 +83,30 @@ describe("keySvg", () => {
 		expect(svg).toMatch(/^<svg[^>]+viewBox="0 0 144 144"/);
 		expect(svg).toContain('data-badge="recording"');
 		expect(keySvg(visualFor("mute", inMeeting()))).not.toContain("data-badge");
+	});
+});
+
+describe("muteDialFeedback", () => {
+	const text = (f: ReturnType<typeof muteDialFeedback>) => [f.label.value, f.detail.value];
+
+	it("says what the mic is doing and what holding will do", () => {
+		expect(text(muteDialFeedback(inMeeting({ isMuted: false })))).toEqual(["Live", "Hold to mute"]);
+		expect(text(muteDialFeedback(inMeeting({ isMuted: true })))).toEqual(["Muted", "Hold to talk"]);
+	});
+
+	it("puts recording ahead of the hint", () => {
+		expect(text(muteDialFeedback(inMeeting({ isRecordingOn: true })))).toEqual(["Live", "Recording"]);
+	});
+
+	it("explains why it's inactive", () => {
+		expect(text(muteDialFeedback(offline))).toEqual(["Teams", "Not connected"]);
+		expect(text(muteDialFeedback(noMeeting))).toEqual(["Mic", "No meeting"]);
+		expect(text(muteDialFeedback(inMeeting({}, { canToggleMute: false })))).toEqual(["Mic", "Not available"]);
+	});
+
+	it("draws the face as a 200×100 strip that matches the key's tone", () => {
+		const face = Buffer.from(muteDialFeedback(inMeeting()).face.split(",")[1], "base64").toString();
+		expect(face).toMatch(/viewBox="0 0 200 100"/);
+		expect(face).toContain("radialGradient"); // lit, like the key
 	});
 });

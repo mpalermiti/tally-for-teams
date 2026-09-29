@@ -1,7 +1,10 @@
 import streamDeck, {
 	SingletonAction,
-	type DidReceiveSettingsEvent,
+	type Action,
+	type DialAction,
 	type KeyAction,
+	type DidReceiveSettingsEvent,
+	type FeedbackPayload,
 	type KeyDownEvent,
 	type WillAppearEvent,
 	type WillDisappearEvent,
@@ -20,7 +23,7 @@ export type KeySettings = { reaction?: Reaction };
 export abstract class TeamsKey extends SingletonAction<KeySettings> {
 	abstract readonly kind: KeyKind;
 
-	/** Settings and last-drawn image per visible key, so redraws skip unchanged keys. */
+	/** Settings and last-drawn image/feedback per visible key or dial, so redraws skip unchanged ones. */
 	#settings = new Map<string, KeySettings>();
 	#drawn = new Map<string, string>();
 
@@ -30,6 +33,20 @@ export abstract class TeamsKey extends SingletonAction<KeySettings> {
 
 	/** The Teams action this key performs. */
 	protected abstract press(settings: KeySettings): Promise<RequestResult>;
+
+	/** Touch-strip content when placed on a Stream Deck+ dial; keys without dial support return nothing. */
+	protected dialFeedback(): FeedbackPayload | undefined {
+		return undefined;
+	}
+
+	/** Runs a Teams request and flashes the key or dial if Teams refuses it. */
+	protected async perform(action: KeyAction<KeySettings> | DialAction<KeySettings>, request: Promise<RequestResult>): Promise<void> {
+		const result = await request;
+		if (!result.ok) {
+			streamDeck.logger.warn(`${this.kind}: ${result.message}`);
+			await action.showAlert();
+		}
+	}
 
 	override onWillAppear(ev: WillAppearEvent<KeySettings>): Promise<void> {
 		this.#settings.set(ev.action.id, ev.payload.settings);
@@ -47,12 +64,8 @@ export abstract class TeamsKey extends SingletonAction<KeySettings> {
 		return this.#draw(ev.action);
 	}
 
-	override async onKeyDown(ev: KeyDownEvent<KeySettings>): Promise<void> {
-		const result = await this.press(ev.payload.settings);
-		if (!result.ok) {
-			streamDeck.logger.warn(`${this.kind}: ${result.message}`);
-			await ev.action.showAlert();
-		}
+	override onKeyDown(ev: KeyDownEvent<KeySettings>): Promise<void> {
+		return this.perform(ev.action, this.press(ev.payload.settings));
 	}
 
 	/** Redraws every visible instance of this key; called whenever the meeting changes. */
@@ -62,12 +75,20 @@ export abstract class TeamsKey extends SingletonAction<KeySettings> {
 		await Promise.all(draws);
 	}
 
-	async #draw(action: { id: string; isKey(): boolean }): Promise<void> {
-		if (!action.isKey()) return;
-		const settings = this.#settings.get(action.id) ?? {};
-		const image = keyDataUrl(visualFor(this.kind, this.teams.snapshot, { reaction: settings.reaction }));
-		if (this.#drawn.get(action.id) === image) return;
-		this.#drawn.set(action.id, image);
-		await (action as KeyAction<KeySettings>).setImage(image);
+	async #draw(action: Action<KeySettings>): Promise<void> {
+		if (action.isKey()) {
+			const settings = this.#settings.get(action.id) ?? {};
+			const image = keyDataUrl(visualFor(this.kind, this.teams.snapshot, { reaction: settings.reaction }));
+			if (this.#drawn.get(action.id) === image) return;
+			this.#drawn.set(action.id, image);
+			await action.setImage(image);
+		} else if (action.isDial()) {
+			const feedback = this.dialFeedback();
+			if (!feedback) return;
+			const signature = JSON.stringify(feedback);
+			if (this.#drawn.get(action.id) === signature) return;
+			this.#drawn.set(action.id, signature);
+			await action.setFeedback(feedback);
+		}
 	}
 }

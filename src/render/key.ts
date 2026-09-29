@@ -95,33 +95,91 @@ function glyphGroup(glyph: GlyphName, color: string, x: number, y: number, size:
 	);
 }
 
+function background(tone: Tone, width: number, height: number): string {
+	const glow = GLOW[tone];
+	if (!glow) return `<rect width="${width}" height="${height}" fill="${INK[tone].bg}"/>`;
+	return (
+		`<defs><radialGradient id="g" cx="50%" cy="42%" r="75%"><stop offset="0" stop-color="${glow[0]}"/><stop offset="1" stop-color="${glow[1]}"/></radialGradient></defs>` +
+		`<rect width="${width}" height="${height}" fill="url(#g)"/>`
+	);
+}
+
+/** Red "being recorded" dot, ringed so it separates from the amber background as well as the dark ones. */
+function recordingBadge(visual: Visual, cx: number, cy: number): string {
+	if (!visual.recording) return "";
+	return `<circle data-badge="recording" cx="${cx}" cy="${cy}" r="9" fill="#FF3B30" stroke="${INK[visual.tone].bg}" stroke-width="3"/>`;
+}
+
+function svg(width: number, height: number, body: string): string {
+	return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">${body}</svg>`;
+}
+
+const dataUrl = (markup: string) => `data:image/svg+xml;base64,${Buffer.from(markup).toString("base64")}`;
+
 /** A 144×144 key face. Stream Deck scales it for smaller keys. */
 export function keySvg(visual: Visual): string {
-	const ink = INK[visual.tone];
-	const glow = GLOW[visual.tone];
 	const offset = (SIZE - GLYPH_SIZE) / 2;
-
-	const background = glow
-		? `<defs><radialGradient id="g" cx="50%" cy="42%" r="75%"><stop offset="0" stop-color="${glow[0]}"/><stop offset="1" stop-color="${glow[1]}"/></radialGradient></defs>` +
-			`<rect width="${SIZE}" height="${SIZE}" fill="url(#g)"/>`
-		: `<rect width="${SIZE}" height="${SIZE}" fill="${ink.bg}"/>`;
-
-	// Ringed so it separates from the amber "on" background as well as the dark ones.
-	const badge = visual.recording
-		? `<circle data-badge="recording" cx="120" cy="24" r="9" fill="#FF3B30" stroke="${ink.bg}" stroke-width="3"/>`
-		: "";
-
-	return (
-		`<svg xmlns="http://www.w3.org/2000/svg" width="${SIZE}" height="${SIZE}" viewBox="0 0 ${SIZE} ${SIZE}">` +
-		background +
-		glyphGroup(visual.glyph, ink.glyph, offset, offset, GLYPH_SIZE) +
-		badge +
-		`</svg>`
+	return svg(
+		SIZE,
+		SIZE,
+		background(visual.tone, SIZE, SIZE) +
+			glyphGroup(visual.glyph, INK[visual.tone].glyph, offset, offset, GLYPH_SIZE) +
+			recordingBadge(visual, 120, 24),
 	);
 }
 
 export function keyDataUrl(visual: Visual): string {
-	return `data:image/svg+xml;base64,${Buffer.from(keySvg(visual)).toString("base64")}`;
+	return dataUrl(keySvg(visual));
+}
+
+// ── Stream Deck+ touch strip (mute dial) ───────────────────────────────────
+//
+// Each dial owns a 200×100 slice of the strip. The face (background, glyph,
+// badge) is our SVG; the words are native text items from layouts/mute-dial.json,
+// so they use Stream Deck's own font rendering.
+
+/** Label and hint colours per tone; the hint sits one step quieter than the label. */
+const TEXT: Record<Tone, { label: string; detail: string }> = {
+	offline: { label: "#5C5C66", detail: "#3A3A42" },
+	idle: { label: "#8A8A94", detail: "#5C5C66" },
+	off: { label: "#EDEDF0", detail: "#8A8A94" },
+	ready: { label: "#EDEDF0", detail: "#8A8A94" },
+	on: { label: "#1E1507", detail: "#6B4A10" },
+	danger: { label: "#FFFFFF", detail: "#FFD6D3" },
+};
+
+export interface DialFeedback {
+	[key: string]: { value: string; color?: string } | string;
+	face: string;
+	label: { value: string; color: string };
+	detail: { value: string; color: string };
+}
+
+/** Face and words for the mute dial's slice of the touch strip. */
+export function muteDialFeedback(snapshot: Snapshot): DialFeedback {
+	const visual = visualFor("mute", snapshot);
+	const { state } = snapshot;
+
+	const [label, detail] =
+		visual.tone === "offline" ? ["Teams", "Not connected"]
+		: visual.tone === "idle" ? ["Mic", state.isInMeeting ? "Not available" : "No meeting"]
+		: visual.recording ? [state.isMuted ? "Muted" : "Live", "Recording"]
+		: state.isMuted ? ["Muted", "Hold to talk"]
+		: ["Live", "Hold to mute"];
+
+	const face = svg(
+		200,
+		100,
+		background(visual.tone, 200, 100) +
+			glyphGroup(visual.glyph, INK[visual.tone].glyph, 22, 24, 52) +
+			recordingBadge(visual, 182, 18),
+	);
+
+	return {
+		face: dataUrl(face),
+		label: { value: label, color: TEXT[visual.tone].label },
+		detail: { value: detail, color: TEXT[visual.tone].detail },
+	};
 }
 
 /** A bare glyph on transparent — for action-list and category icons. */

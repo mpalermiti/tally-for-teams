@@ -1,14 +1,55 @@
-import { action } from "@elgato/streamdeck";
+import {
+	action,
+	type DialDownEvent,
+	type DialRotateEvent,
+	type DialUpEvent,
+	type TouchTapEvent,
+} from "@elgato/streamdeck";
 
+import { muteDialFeedback } from "../render/key";
+import { HoldToggle, RotateToggle } from "./gestures";
 import { TeamsKey, type KeySettings } from "./teams-key";
 
 // One class per key: Stream Deck identifies actions by UUID, and each UUID needs its own decorated class.
 // UUIDs must match ai.michaelp.teams.sdPlugin/manifest.json.
 
+/**
+ * Mute works on a key or a Stream Deck+ dial. On a dial: tap toggles, hold flips
+ * the mic only while held (push-to-talk / cough button), turn right to unmute and
+ * left to mute, touch the strip to toggle.
+ */
 @action({ UUID: "ai.michaelp.teams.mute" })
 export class MuteKey extends TeamsKey {
 	readonly kind = "mute";
 	protected press = () => this.teams.request("toggle-mute");
+
+	#hold = new HoldToggle();
+	#rotate = new RotateToggle();
+
+	protected override dialFeedback() {
+		return muteDialFeedback(this.teams.snapshot);
+	}
+
+	override onDialDown(ev: DialDownEvent<KeySettings>): Promise<void> {
+		this.#hold.down(this.#muted);
+		return this.perform(ev.action, this.press());
+	}
+
+	override async onDialUp(ev: DialUpEvent<KeySettings>): Promise<void> {
+		if (this.#hold.up(this.#muted)) await this.perform(ev.action, this.press());
+	}
+
+	override async onDialRotate(ev: DialRotateEvent<KeySettings>): Promise<void> {
+		if (this.#rotate.shouldToggle(ev.payload.ticks, this.#muted)) await this.perform(ev.action, this.press());
+	}
+
+	override onTouchTap(ev: TouchTapEvent<KeySettings>): Promise<void> {
+		return this.perform(ev.action, this.press());
+	}
+
+	get #muted(): boolean {
+		return this.teams.snapshot.state.isMuted;
+	}
 }
 
 @action({ UUID: "ai.michaelp.teams.camera" })

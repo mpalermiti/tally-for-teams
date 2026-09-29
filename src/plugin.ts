@@ -4,7 +4,7 @@ import { BlurKey, CameraKey, ChatKey, HandKey, LeaveKey, MuteKey, ReactKey, Shar
 import { TeamsClient } from "./teams/client";
 
 // Keep in step with "Version" in manifest.json. Teams shows it in its list of connected apps.
-const VERSION = "0.1.0";
+const VERSION = "0.2.0";
 
 type GlobalSettings = { teamsToken?: string };
 

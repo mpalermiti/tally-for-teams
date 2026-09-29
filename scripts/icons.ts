@@ -72,8 +72,9 @@ writeFileSync(
 );
 
 // 2. PNGs — imported after glyphs.ts is written so the renderer sees the fresh set.
-const { KEY_KINDS, glyphSvg, keySvg, visualFor, markSvg } = await import("../src/render/key");
-const { OFFLINE_SNAPSHOT } = await import("../src/render/key");
+const { KEY_KINDS, OFFLINE_SNAPSHOT, glyphSvg, keySvg, markSvg, muteDialFeedback, visualFor } = await import(
+	"../src/render/key"
+);
 
 function png(svg: string, size: number, path: string): void {
 	mkdirSync(dirname(path), { recursive: true });
@@ -91,6 +92,16 @@ for (const kind of KEY_KINDS) {
 	png(keySvg(visual), 72, join(dir, "key.png"));
 	png(keySvg(visual), 144, join(dir, "key@2x.png"));
 }
+
+// Stream Deck+ mute dial: the dial's icon in the app, and the strip shown before the plugin draws.
+const muteDir = join(pluginDir, "imgs/actions/mute");
+const padded = (size: number) =>
+	`<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="-6 -6 36 36">${glyphSvg("mic", "#FFFFFF").replace(/^<svg[^>]*>|<\/svg>$/g, "")}</svg>`;
+png(padded(72), 72, join(muteDir, "dial.png"));
+png(padded(144), 144, join(muteDir, "dial@2x.png"));
+const strip = Buffer.from(muteDialFeedback(OFFLINE_SNAPSHOT).face.split(",")[1], "base64").toString();
+png(strip, 200, join(muteDir, "strip.png"));
+png(strip, 400, join(muteDir, "strip@2x.png"));
 
 png(glyphSvg("audio-lines", "#FFFFFF"), 28, join(pluginDir, "imgs/plugin/category-icon.png"));
 png(glyphSvg("audio-lines", "#FFFFFF"), 56, join(pluginDir, "imgs/plugin/category-icon@2x.png"));

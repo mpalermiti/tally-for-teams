@@ -1,7 +1,7 @@
 {
 	"$schema": "https://schemas.elgato.com/streamdeck/plugins/manifest.json",
 	"Name": "Teams Controls",
-	"Version": "0.1.0.0",
+	"Version": "0.2.0.0",
 	"Author": "Michael Palermiti",
 	"Description": "Meeting controls for Microsoft Teams with live state on every key: mute, camera, blur, hand, reactions, chat, share, leave.",
 	"UUID": "ai.michaelp.teams",
@@ -31,16 +31,27 @@
 			"Name": "Mute",
 			"UUID": "ai.michaelp.teams.mute",
 			"Icon": "imgs/actions/mute/icon",
-			"Tooltip": "Toggle your microphone. Lit while your mic is live.",
+			"Tooltip": "Toggle your microphone. Lit while your mic is live. On a Stream Deck+ dial: hold to talk, turn to mute or unmute.",
 			"Controllers": [
-				"Keypad"
+				"Keypad",
+				"Encoder"
 			],
 			"States": [
 				{
 					"Image": "imgs/actions/mute/key",
 					"ShowTitle": false
 				}
-			]
+			],
+			"Encoder": {
+				"layout": "layouts/mute-dial.json",
+				"Icon": "imgs/actions/mute/dial",
+				"TriggerDescription": {
+					"Push": "Tap to toggle, hold to talk",
+					"Rotate": "Right to unmute, left to mute",
+					"Touch": "Toggle mute"
+				},
+				"background": "imgs/actions/mute/strip"
+			}
 		},
 		{
 			"Name": "Camera",

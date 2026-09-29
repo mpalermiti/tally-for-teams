@@ -136,6 +136,53 @@ try {
 	await until(() => lastImage("MUTE1").includes("#8A8A94"), "mute key goes dark once muted");
 	check(!fromPlugin.some((m) => m.event === "showAlert" && m.context === "MUTE1"), "no alert on a successful press");
 
+	// Stream Deck+ dial on the same Mute action.
+	const feedbackFor = (context) => fromPlugin.filter((m) => m.event === "setFeedback" && m.context === context).at(-1)?.payload;
+	const toggles = () => toTeams.filter((m) => m.action === "toggle-mute").length;
+	const answer = (muted) => {
+		const last = toTeams.filter((m) => m.action === "toggle-mute").at(-1);
+		teamsSocket.send(JSON.stringify({ requestId: last.requestId, response: "Success" }));
+		teamsSocket.send(JSON.stringify({ meetingUpdate: { meetingState: { isMuted: muted } } }));
+	};
+	const dialPayload = { settings: {}, coordinates: { column: 0, row: 0 }, controller: "Encoder", isInMultiAction: false };
+	toPlugin({ event: "willAppear", ...key("mute", "DIAL1", { payload: dialPayload }) });
+	await until(() => feedbackFor("DIAL1")?.label?.value === "Muted", "mute dial's strip says Muted");
+	check(feedbackFor("DIAL1")?.detail?.value === "Recording", "…and warns that the meeting is recording");
+
+	// Hold to talk: press unmutes at once, release after a hold re-mutes.
+	let before = toggles();
+	toPlugin({ event: "dialDown", ...key("mute", "DIAL1", { payload: dialPayload }) });
+	await until(() => toggles() === before + 1, "pressing the dial toggles mute immediately");
+	answer(false);
+	await until(() => feedbackFor("DIAL1")?.label?.value === "Live", "strip switches to Live");
+	await new Promise((r) => setTimeout(r, 500));
+	toPlugin({ event: "dialUp", ...key("mute", "DIAL1", { payload: dialPayload }) });
+	await until(() => toggles() === before + 2, "releasing after a hold re-mutes (push-to-talk)");
+	answer(true);
+	await until(() => feedbackFor("DIAL1")?.label?.value === "Muted", "strip back to Muted");
+
+	// Tap: press + quick release leaves it toggled.
+	before = toggles();
+	toPlugin({ event: "dialDown", ...key("mute", "DIAL1", { payload: dialPayload }) });
+	toPlugin({ event: "dialUp", ...key("mute", "DIAL1", { payload: dialPayload }) });
+	await new Promise((r) => setTimeout(r, 300));
+	check(toggles() === before + 1, "a quick tap toggles once");
+	answer(false);
+	await until(() => feedbackFor("DIAL1")?.label?.value === "Live", "…leaving the mic live");
+
+	// Turn left mutes (once, despite a burst of ticks); turning left again while muted does nothing.
+	await new Promise((r) => setTimeout(r, 600));
+	before = toggles();
+	for (let i = 0; i < 3; i++)
+		toPlugin({ event: "dialRotate", ...key("mute", "DIAL1", { payload: { ...dialPayload, ticks: -1, pressed: false } }) });
+	await new Promise((r) => setTimeout(r, 300));
+	check(toggles() === before + 1, "turning left mutes exactly once for a burst of ticks");
+	answer(true);
+	await new Promise((r) => setTimeout(r, 600));
+	toPlugin({ event: "dialRotate", ...key("mute", "DIAL1", { payload: { ...dialPayload, ticks: -2, pressed: false } }) });
+	await new Promise((r) => setTimeout(r, 300));
+	check(toggles() === before + 1, "turning left while already muted does nothing");
+
 	// Reaction uses the key's setting.
 	toPlugin({ event: "keyDown", ...key("react", "REACT1", { payload: keyPayload({ reaction: "love" }) }) });
 	await until(

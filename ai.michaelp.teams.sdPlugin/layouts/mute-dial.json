@@ -1,0 +1,25 @@
+{
+	"$schema": "https://schemas.elgato.com/streamdeck/plugins/layout.json",
+	"id": "ai.michaelp.teams.mute-dial",
+	"items": [
+		{ "key": "face", "type": "pixmap", "rect": [0, 0, 200, 100], "zOrder": 0 },
+		{
+			"key": "label",
+			"type": "text",
+			"rect": [90, 28, 104, 26],
+			"zOrder": 1,
+			"alignment": "left",
+			"font": { "size": 22, "weight": 600 },
+			"text-overflow": "ellipsis"
+		},
+		{
+			"key": "detail",
+			"type": "text",
+			"rect": [90, 56, 104, 18],
+			"zOrder": 1,
+			"alignment": "left",
+			"font": { "size": 13, "weight": 500 },
+			"text-overflow": "ellipsis"
+		}
+	]
+}

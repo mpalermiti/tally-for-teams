@@ -13,7 +13,7 @@ mic and camera means the meeting is being recorded.
 
 | Key | Press | Lit when |
 |---|---|---|
-| Mute | toggle mic | mic is live |
+| Mute | toggle mic (also works on a Stream Deck+ dial, see below) | mic is live |
 | Camera | toggle camera | camera is on |
 | Background blur | toggle blur | blurred |
 | Raise hand | raise / lower | hand is up |
@@ -21,6 +21,16 @@ mic and camera means the meeting is being recorded.
 | React | send the reaction chosen in the key's settings | — |
 | Chat | open / close meeting chat | unread messages |
 | Share | open the share tray; while presenting, stop sharing | sharing |
+
+### Stream Deck+ dial
+
+Put **Mute** on a dial and its strip shows a large **Live** or **Muted**, with what holding will
+do, or a recording warning.
+
+- **Tap** the dial: toggle mute.
+- **Hold** the dial: flip the mic only while held. Muted, it's push-to-talk; live, it's a cough button.
+- **Turn right** to unmute, **left** to mute. Turning toward the state you're already in does nothing.
+- **Touch** the strip: toggle mute.
 
 ## Setup
 
@@ -42,7 +52,7 @@ Teams won't report meeting state.
 ## Development
 
 ```bash
-npm test            # unit tests: Teams client (against a fake Teams) + key visuals
+npm test            # unit tests: Teams client (against a fake Teams), key/dial visuals, dial gestures
 npm run typecheck
 npm run build       # bundle to ai.michaelp.teams.sdPlugin/bin/plugin.js
 npm run smoke       # end-to-end: runs the built plugin against a fake Stream Deck + fake Teams
@@ -57,7 +67,7 @@ npm run sheet -- out.png   # render all keys in all states to one image
 src/teams/protocol.ts   wire types for the Teams local API (ws://127.0.0.1:8124, protocol 2.0.0)
 src/teams/client.ts     one shared connection: pairing token, reconnect, request/response
 src/render/key.ts       meeting state → key visual (pure), and the SVG key design
-src/actions/            one class per key; all behaviour lives in teams-key.ts
+src/actions/            one class per key; shared behaviour in teams-key.ts, dial gestures in gestures.ts
 src/plugin.ts           wiring: load the saved token, register keys, redraw on change
 ```
 
