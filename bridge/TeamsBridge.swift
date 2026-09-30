@@ -11,7 +11,7 @@
 //          {"cmd":"menu","req":2,"id":"reaction-menu-button","itemIds":["like-button"],"labels":["like"]}
 //                                                                                 open a menu, press the new item (id first, then label)
 //          {"cmd":"prompt"}                                                       show macOS's Accessibility permission prompt
-//   stdout {"type":"status","trusted":true,"running":true,"buttons":{"microphone-button":{"label":"Mute mic","enabled":true}}}
+//   stdout {"type":"status","trusted":true,"running":true,"buttons":{"microphone-button":{"label":"Mute mic","enabled":true,"style":"fui-Button …"}}}
 //          {"type":"result","req":1,"ok":true,"message":"pressed"}
 //          {"type":"log","message":"…"}
 //
@@ -51,16 +51,24 @@ func label(_ element: AXUIElement) -> String? {
 func domID(_ element: AXUIElement) -> String? {
 	string(element, "AXDOMIdentifier") ?? string(element, kAXIdentifierAttribute)
 }
+/// The element's web classes. Teams signals some states (a raised hand) only through styling.
+func style(_ element: AXUIElement) -> String? {
+	(value(element, "AXDOMClassList") as? [String]).flatMap { $0.isEmpty ? nil : $0.joined(separator: " ") }
+}
 
 /// Only real controls. Teams also makes chat rows and messages pressable; never touch those.
 let controlRoles: Set<String> = [
 	"AXButton", "AXCheckBox", "AXRadioButton", "AXMenuButton", "AXPopUpButton", "AXMenuItem", "AXToggle", "AXSwitch",
 ]
 
-/// Every control in the app's windows. Bounded so a huge tree can't stall the helper.
-func controls(in app: AXUIElement, maxNodes: Int = 40_000) -> [AXUIElement] {
+func windows(of app: AXUIElement) -> [AXUIElement] {
+	(value(app, kAXWindowsAttribute) as? [AXUIElement]) ?? []
+}
+
+/// Every control under `root`. Bounded so a huge tree can't stall the helper.
+func controls(under root: AXUIElement, maxNodes: Int = 40_000) -> [AXUIElement] {
 	var found: [AXUIElement] = []
-	var stack = (value(app, kAXWindowsAttribute) as? [AXUIElement]) ?? []
+	var stack = [root]
 	var visited = 0
 	while let element = stack.popLast(), visited < maxNodes {
 		visited += 1
@@ -68,6 +76,11 @@ func controls(in app: AXUIElement, maxNodes: Int = 40_000) -> [AXUIElement] {
 		stack.append(contentsOf: children(element))
 	}
 	return found
+}
+
+/// Every control in all of the app's windows.
+func controls(in app: AXUIElement) -> [AXUIElement] {
+	windows(of: app).flatMap { controls(under: $0) }
 }
 
 // MARK: - State
@@ -96,14 +109,36 @@ func disableTree() {
 	if let axApp { AXUIElementSetAttributeValue(axApp, "AXEnhancedUserInterface" as CFString, kCFBooleanFalse) }
 }
 
-/// Full scan for the watched ids. Costs 50–450 ms, so it's throttled; normal polling re-reads cached buttons.
+/// Full scan for the watched ids. A meeting can have two windows (the full one and a compact
+/// view) that come and go, so every id is taken from the one window holding the anchor and the
+/// most of them; mixing the two would compare buttons from different toolbars.
+/// Costs 50–450 ms, so it's throttled; normal polling re-reads cached buttons.
 func discover(_ app: AXUIElement) {
 	lastDiscovery = Date()
-	cache = [:]
 	let wanted = Set(watchIDs)
-	for element in controls(in: app) {
-		if let id = domID(element), wanted.contains(id), cache[id] == nil { cache[id] = element }
+	var best: [String: AXUIElement] = [:]
+	var bestScore = 0
+	for window in windows(of: app) {
+		var found: [String: AXUIElement] = [:]
+		for element in controls(under: window) {
+			if let id = domID(element), wanted.contains(id), found[id] == nil { found[id] = element }
+		}
+		let score = found.count + (found[anchorID] != nil ? 1000 : 0)
+		if score > bestScore { (best, bestScore) = (found, score) }
 	}
+	cache = best
+}
+
+/// The cached buttons that are still on screen.
+func readButtons() -> [String: [String: Any]] {
+	var buttons: [String: [String: Any]] = [:]
+	for (id, element) in cache {
+		guard let text = label(element) else { continue }
+		var button: [String: Any] = ["label": text, "enabled": (value(element, kAXEnabledAttribute) as? NSNumber)?.boolValue ?? true]
+		if let style = style(element) { button["style"] = style }
+		buttons[id] = button
+	}
+	return buttons
 }
 
 func poll() {
@@ -124,15 +159,15 @@ func poll() {
 			lastDiscovery = .distantPast
 		}
 		if let app = axApp {
-			let anchorAlive = cache[anchorID].flatMap(label) != nil
+			buttons = readButtons()
 			let since = Date().timeIntervalSince(lastDiscovery)
-			// Rediscover when the meeting toolbar vanished or reappeared (throttled), and every
-			// 10 s in a meeting to catch buttons moving in or out of the "More" overflow.
-			if (!anchorAlive && since > 2) || (anchorAlive && since > 10) { discover(app) }
-			for (id, element) in cache {
-				guard let text = label(element) else { continue }
-				let enabled = (value(element, kAXEnabledAttribute) as? NSNumber)?.boolValue ?? true
-				buttons[id] = ["label": text, "enabled": enabled]
+			// Rediscover (throttled) when the toolbar vanished or any watched button went stale:
+			// Teams rebuilds the toolbar when sharing starts and swaps in the compact view. Also
+			// every 10 s in a meeting, to catch buttons moving in or out of the "More" overflow.
+			let stale = buttons[anchorID] == nil || buttons.count < cache.count
+			if (stale && since > 2) || since > 10 {
+				discover(app)
+				buttons = readButtons()
 			}
 		}
 	} else if !trusted || teamsApp() == nil {

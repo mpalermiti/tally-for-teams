@@ -11,9 +11,9 @@ account, or Graph permission involved, and it never reads chat or message conten
 
 ![Every key in every state](docs/keys.png)
 
-**One rule: a lit key means it's live.** Warm = your mic is hot, camera is on, you're sharing,
-or chat has unread messages. Dark = off. Dimmed = not in a meeting (dimmer still = Teams isn't
-readable). Leave turns red during a meeting.
+**One rule: a lit key means it's live.** Warm = your mic is hot, camera is on, your hand is up,
+you're sharing, or chat has unread messages. Dark = off. Dimmed = not in a meeting (dimmer still =
+Teams isn't readable). Leave turns red during a meeting.
 
 | Key | Press | Lit when | Status on Teams 26267 |
 |---|---|---|---|
@@ -21,12 +21,14 @@ readable). Leave turns red during a meeting.
 | Camera | toggle camera | camera is on | ✅ verified |
 | Leave | leave the meeting | (red during a meeting) | button verified |
 | Chat | open / close meeting chat | unread messages* | button verified |
-| Share | open the share tray; while presenting, stop sharing* | sharing* | button verified |
+| Share | open the share tray; while presenting, stop sharing* | sharing | "Stop sharing" label verified |
 | React | send the chosen reaction (Like, Love, Applause, Laugh, Wow) via the React menu | — | menu item ids verified |
-| Raise hand | raise / lower via the React menu | (not shown†) | menu item id verified |
+| Raise hand | raise / lower via the React menu | hand is up† | menu item id and styling verified |
 
-\* Label while presenting / with unread messages not seen yet.
-† Teams only shows whether your hand is up inside the React menu, so the key can't light up for it.
+\* Unverified: the unread-messages label, and that pressing Stop sharing stops it.
+† Teams says whether your hand is up only in a hover tooltip, but it restyles the React button
+while it is. The plugin compares React with the plain toolbar buttons (People, More, Chat), so it
+doesn't depend on Teams' generated class names.
 
 ### Stream Deck+ dial
 
@@ -84,6 +86,10 @@ npm run icons       # regenerate glyphs.ts and every PNG after design changes
 npm run sheet -- out.png   # render all keys in all states to one image
 ```
 
+CI (`.github/workflows/build.yml`) typechecks, tests, packs and smoke-tests on a Mac on every push
+to `main`, and keeps the package as a run artifact. That's how `dist/` is refreshed when npm is
+blocked locally: `gh run download --name ai.michaelp.teams.streamDeckPlugin --dir dist`.
+
 Probe Teams directly (terminal needs Accessibility permission; run during a meeting):
 
 ```bash
@@ -91,6 +97,8 @@ swift probe/teams-ax-probe.swift              # list the meeting toolbar's butto
 swift probe/teams-ax-probe.swift --watch      # live mute/camera labels; Ctrl-C to stop
 swift probe/teams-ax-probe.swift --press-test # press mute twice (mic blips on, then back)
 swift probe/teams-ax-probe.swift --menus      # list what the React / More / video-options menus offer
+swift probe/teams-ax-diff.swift --only reaction-menu-button,share-button
+                                              # print what changes as you raise a hand, share, …
 ```
 
 ```

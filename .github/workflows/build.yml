@@ -1,0 +1,37 @@
+name: Build
+
+# Tests, builds and packs the plugin on a Mac, and keeps the package as a run artifact.
+# This is where dist/ comes from, since npm is blocked on some networks:
+#   gh run download --name ai.michaelp.teams.streamDeckPlugin --dir dist
+on:
+  push:
+    branches: [main]
+    paths-ignore: ["dist/**", "docs/**", "**/*.md"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - name: Pack
+        run: |
+          rm -f dist/*.streamDeckPlugin
+          npm run pack
+          mkdir -p dist
+          mv ai.michaelp.teams.streamDeckPlugin dist/
+      - run: npm run smoke
+      - run: npm run smoke:package
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ai.michaelp.teams.streamDeckPlugin
+          path: dist/ai.michaelp.teams.streamDeckPlugin
+          if-no-files-found: error

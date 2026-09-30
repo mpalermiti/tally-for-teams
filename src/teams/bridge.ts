@@ -11,7 +11,7 @@ import {
 	type Snapshot,
 	type TeamsAction,
 } from "./protocol";
-import { ANCHOR_ID, BUTTON_IDS, TEAMS_BUNDLE_IDS, commandFor, snapshotFrom, type BridgeStatus } from "./selectors";
+import { ANCHOR_ID, TEAMS_BUNDLE_IDS, WATCH_IDS, commandFor, snapshotFrom, type BridgeStatus } from "./selectors";
 
 /** The parts of a child process the bridge uses; tests substitute a fake. */
 export interface BridgeProcess {
@@ -123,7 +123,7 @@ export class TeamsBridge extends EventEmitter<{ change: [Snapshot] }> {
 		// A missing or unlaunchable binary surfaces as an error event on real processes.
 		(process as unknown as EventEmitter).on?.("error", (error: Error) => this.#options.log?.(`teams-bridge: ${error.message}`));
 
-		this.#write({ cmd: "watch", ids: Object.values(BUTTON_IDS), anchor: ANCHOR_ID, bundleIds: TEAMS_BUNDLE_IDS });
+		this.#write({ cmd: "watch", ids: WATCH_IDS, anchor: ANCHOR_ID, bundleIds: TEAMS_BUNDLE_IDS });
 	}
 
 	#handle(line: string): void {

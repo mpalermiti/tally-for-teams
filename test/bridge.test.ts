@@ -83,7 +83,12 @@ describe("TeamsBridge", () => {
 			cmd: "watch",
 			anchor: ANCHOR_ID,
 			bundleIds: ["com.microsoft.teams2"],
-			ids: expect.arrayContaining(Object.values(BUTTON_IDS)),
+			ids: expect.arrayContaining([
+				...Object.values(BUTTON_IDS),
+				"raisehands-button",
+				"roster-button",
+				"callingButtons-showMoreBtn",
+			]),
 		});
 	});
 

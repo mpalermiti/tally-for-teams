@@ -2,12 +2,13 @@
  * Everything the plugin knows about Teams' on-screen controls, in one place.
  *
  * The bridge (bridge/TeamsBridge.swift) only finds buttons by web id, reads their
- * labels and presses them. What those buttons mean lives here, so when a Teams
+ * labels and styles, and presses them. What those mean lives here, so when a Teams
  * update renames something, this file is the fix.
  *
  * Confirmed on Teams 26267 for Mac (2026-09-29) with probe/teams-ax-probe.swift:
  * toolbar and React-menu ids, the mute and camera labels, and pressing and reading
- * with Teams in the background.
+ * with Teams in the background. With probe/teams-ax-diff.swift: the "Stop sharing"
+ * label and how a raised hand restyles React.
  * Marked UNVERIFIED below: guesses awaiting a probe run.
  */
 
@@ -36,6 +37,12 @@ export const BUTTON_IDS = {
 export const ANCHOR_ID = BUTTON_IDS.mute;
 
 /**
+ * Toolbar buttons that almost always sit in their resting style. What most of them look like
+ * is the baseline a raised hand is compared with (see `handRaised`).
+ */
+export const PLAIN_IDS = ["callingButtons-showMoreBtn", "roster-button", BUTTON_IDS.chat] as const;
+
+/**
  * React-menu items, confirmed on Teams 26267 with `probe --menus`: ids like-button,
  * heart-button, applause-button, laugh-button, surprised-button, raisehands-button
  * (labels Like, Love, Applause, Laugh, Surprised, Raise). Ids are matched first; the
@@ -48,12 +55,20 @@ const REACTION_ITEMS: Record<Reaction, { id: string; labels: string[] }> = {
 	laugh: { id: "laugh-button", labels: ["laugh"] },
 	wow: { id: "surprised-button", labels: ["surprised", "wow"] },
 };
-/** Raise hand is in the React menu. Its label is "Raise"; "Lower" while raised is expected but unverified. */
+/**
+ * Raise hand is in the React menu, and also on the toolbar itself in the compact meeting view.
+ * Its label stays "Raise" while your hand is up (confirmed on Teams 26267).
+ */
 const HAND_ITEM = { id: "raisehands-button", labels: ["raise", "lower"] };
+
+/** Every web id the bridge keeps an eye on. */
+export const WATCH_IDS = [...new Set<string>([...Object.values(BUTTON_IDS), HAND_ITEM.id, ...PLAIN_IDS])];
 
 export interface BridgeButton {
 	label: string;
 	enabled: boolean;
+	/** The button's web classes. Only ever compared with other buttons', never interpreted. */
+	style?: string;
 }
 
 export interface BridgeStatus {
@@ -79,7 +94,8 @@ export function snapshotFrom(status: BridgeStatus): Snapshot {
 	const camera = label(BUTTON_IDS.camera);
 	const share = label(BUTTON_IDS.share);
 	const chat = label(BUTTON_IDS.chat);
-	const sharing = share?.startsWith("stop") ?? false; // UNVERIFIED: label while presenting
+	// "Stop sharing" is shown while presenting (confirmed on Teams 26267).
+	const sharing = share?.startsWith("stop") ?? false;
 
 	return {
 		online: true,
@@ -90,6 +106,7 @@ export function snapshotFrom(status: BridgeStatus): Snapshot {
 			isMuted: mic?.startsWith("unmute") ?? false,
 			// "Turn camera off" is shown while the camera is on.
 			isVideoOn: camera?.includes("off") ?? false,
+			isHandRaised: handRaised(status),
 			isSharing: sharing,
 			hasUnreadMessages: chat ? /unread|new message/.test(chat) : false, // UNVERIFIED
 		},
@@ -99,12 +116,37 @@ export function snapshotFrom(status: BridgeStatus): Snapshot {
 			canToggleVideo: usable(BUTTON_IDS.camera),
 			canLeave: usable(BUTTON_IDS.leave),
 			canReact: usable(BUTTON_IDS.react),
-			canToggleHand: usable(BUTTON_IDS.react),
+			canToggleHand: usable(BUTTON_IDS.react) || usable(HAND_ITEM.id),
 			canToggleChat: usable(BUTTON_IDS.chat),
 			canToggleShareTray: usable(BUTTON_IDS.share),
 			canStopSharing: usable(BUTTON_IDS.share) && sharing,
 		},
 	};
+}
+
+/**
+ * Teams keeps React's label while your hand is up and only says so in a hover tooltip, but it
+ * restyles the button: at rest React looks exactly like the plain toolbar buttons, raised it
+ * doesn't. The compact view restyles its own raise-hand button instead. Comparing with the
+ * plain buttons avoids depending on Teams' generated class names, which change between builds.
+ * Confirmed on Teams 26267 (2026-09-29) with probe/teams-ax-diff.swift.
+ */
+function handRaised(status: BridgeStatus): boolean {
+	const resting = restingStyle(status);
+	const hand = status.buttons[HAND_ITEM.id] ?? status.buttons[BUTTON_IDS.react];
+	return resting !== undefined && hand?.style !== undefined && hand.style !== resting;
+}
+
+/** What most plain toolbar buttons look like right now; ties go to the first in PLAIN_IDS. */
+function restingStyle(status: BridgeStatus): string | undefined {
+	const styles = PLAIN_IDS.map((id) => status.buttons[id]?.style).filter((s): s is string => s !== undefined);
+	let best: string | undefined;
+	let bestCount = 0;
+	for (const style of styles) {
+		const count = styles.filter((s) => s === style).length;
+		if (count > bestCount) [best, bestCount] = [style, count];
+	}
+	return best;
 }
 
 /** What the bridge should do for a key's action. */
