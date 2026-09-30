@@ -79,7 +79,7 @@ export class HoldToConfirm {
 	/** How far through the hold, 0–1, or undefined when not held. */
 	get progress(): number | undefined {
 		if (this.#startedAt === undefined) return undefined;
-		return Math.min(1, (this.now() - this.#startedAt) / this.holdMs);
+		return Math.max(0, Math.min(1, (this.now() - this.#startedAt) / this.holdMs));
 	}
 
 	/** True exactly once per hold, the first time it's asked after the hold completes. */

@@ -96,6 +96,15 @@ describe("HoldToConfirm", () => {
 		expect(hold.progress).toBeUndefined();
 	});
 
+	it("never reports negative progress if the clock goes backwards", () => {
+		const c = clock();
+		const hold = new HoldToConfirm(600, c.now);
+		hold.start();
+		c.advance(-100);
+		expect(hold.progress).toBe(0);
+		expect(hold.fire()).toBe(false);
+	});
+
 	it("doesn't call it a tap once the hold has fired", () => {
 		const c = clock();
 		const hold = new HoldToConfirm(600, c.now);
