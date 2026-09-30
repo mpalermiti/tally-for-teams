@@ -1,0 +1,53 @@
+name: Something's wrong
+description: A key doesn't work, shows the wrong state, or Teams changed something.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Teams changes its interface often. These details make a fix quick.
+  - type: dropdown
+    id: key
+    attributes:
+      label: Which key?
+      options: [Mute, Mute dial (Stream Deck +), Camera, Raise hand, Leave, React, Chat, Share, All of them]
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: input
+    id: teams
+    attributes:
+      label: Teams version
+      description: Teams → Settings → About Teams (for example 26267.1701.5163.3395)
+    validations:
+      required: true
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version
+  - type: input
+    id: deck
+    attributes:
+      label: Stream Deck model and app version
+  - type: input
+    id: tally
+    attributes:
+      label: Tally version
+      description: Stream Deck → Settings → Plugins
+  - type: textarea
+    id: probe
+    attributes:
+      label: Probe output (optional, very helpful)
+      description: >-
+        During a meeting, run `swift probe/teams-ax-probe.swift` from a clone of this repo and
+        paste the output. Check it for people's names first.
+      render: text
+  - type: markdown
+    attributes:
+      value: >-
+        Plugin logs are in `~/Library/Application Support/com.elgato.StreamDeck/Plugins/ai.michaelp.tally.sdPlugin/logs/`.
+        Attaching the latest one helps.
