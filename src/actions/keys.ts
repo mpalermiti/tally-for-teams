@@ -3,11 +3,15 @@ import {
 	type DialDownEvent,
 	type DialRotateEvent,
 	type DialUpEvent,
+	type KeyAction,
+	type KeyDownEvent,
+	type KeyUpEvent,
 	type TouchTapEvent,
+	type WillDisappearEvent,
 } from "@elgato/streamdeck";
 
 import { muteDialFeedback } from "../render/key";
-import { HoldToggle, RotateToggle } from "./gestures";
+import { HOLD_TO_LEAVE_MS, HoldToConfirm, HoldToggle, RotateToggle } from "./gestures";
 import { TeamsKey, type KeySettings } from "./teams-key";
 
 // One class per key: Stream Deck identifies actions by UUID, and each UUID needs its own decorated class.
@@ -68,6 +72,69 @@ export class HandKey extends TeamsKey {
 export class LeaveKey extends TeamsKey {
 	readonly kind = "leave";
 	protected press = () => this.teams.request("leave-call");
+
+	/** Holds in progress, by key, with the timer animating each. */
+	#holds = new Map<string, { hold: HoldToConfirm; timer: ReturnType<typeof setInterval> }>();
+	#hintSerials = new Map<string, number>();
+	#nextHintSerial = 0;
+
+	override onKeyDown(ev: KeyDownEvent<KeySettings>): Promise<void> {
+		// A multi-action sends down and up together, so it can't be held.
+		if (!ev.payload.settings.holdToLeave || ev.payload.isInMultiAction) return super.onKeyDown(ev);
+		this.#stop(ev.action.id);
+		this.#hintSerials.delete(ev.action.id);
+		const hold = new HoldToConfirm(HOLD_TO_LEAVE_MS);
+		hold.start();
+		const timer = setInterval(() => void this.#tick(ev.action, hold), 50);
+		this.#holds.set(ev.action.id, { hold, timer });
+		return this.setOverlay(ev.action, { progress: 0 });
+	}
+
+	override async onKeyUp(ev: KeyUpEvent<KeySettings>): Promise<void> {
+		const held = this.#holds.get(ev.action.id);
+		if (!held) return;
+		if (held.hold.fire()) {
+			this.#stop(ev.action.id);
+			await this.setOverlay(ev.action, undefined);
+			await this.perform(ev.action, this.press());
+			return;
+		}
+		this.#stop(ev.action.id);
+		if (!held.hold.release()) return;
+		const hintSerial = ++this.#nextHintSerial;
+		this.#hintSerials.set(ev.action.id, hintSerial);
+		await this.setOverlay(ev.action, { hint: "Hold" });
+		setTimeout(() => {
+			if (!this.#holds.has(ev.action.id) && this.#hintSerials.get(ev.action.id) === hintSerial) {
+				this.#hintSerials.delete(ev.action.id);
+				void this.setOverlay(ev.action, undefined);
+			}
+		}, 1000);
+	}
+
+	override onWillDisappear(ev: WillDisappearEvent<KeySettings>): void {
+		this.#stop(ev.action.id);
+		this.#hintSerials.delete(ev.action.id);
+		super.onWillDisappear(ev);
+	}
+
+	async #tick(action: KeyAction<KeySettings>, hold: HoldToConfirm): Promise<void> {
+		if (this.#holds.get(action.id)?.hold !== hold) return;
+		if (hold.fire()) {
+			this.#stop(action.id);
+			await this.setOverlay(action, undefined);
+			await this.perform(action, this.press());
+			return;
+		}
+		await this.setOverlay(action, { progress: hold.progress ?? 0 });
+	}
+
+	#stop(id: string): void {
+		const held = this.#holds.get(id);
+		if (!held) return;
+		clearInterval(held.timer);
+		this.#holds.delete(id);
+	}
 }
 
 @action({ UUID: "ai.michaelp.tally.react" })

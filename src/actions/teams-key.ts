@@ -10,12 +10,12 @@ import streamDeck, {
 	type WillDisappearEvent,
 } from "@elgato/streamdeck";
 
-import { keyDataUrl, visualFor, type KeyKind } from "../render/key";
+import { keyDataUrl, visualFor, type KeyKind, type KeyOverlay } from "../render/key";
 import type { TeamsBridge } from "../teams/bridge";
 import type { RequestResult } from "../teams/protocol";
 import type { Reaction } from "../teams/protocol";
 
-export type KeySettings = { reaction?: Reaction };
+export type KeySettings = { reaction?: Reaction; holdToLeave?: boolean };
 
 /**
  * Shared behaviour for every Teams key: draw from the live meeting snapshot,
@@ -27,6 +27,7 @@ export abstract class TeamsKey extends SingletonAction<KeySettings> {
 	/** Settings and last-drawn image/feedback per visible key or dial, so redraws skip unchanged ones. */
 	#settings = new Map<string, KeySettings>();
 	#drawn = new Map<string, string>();
+	#overlays = new Map<string, KeyOverlay>();
 
 	constructor(protected readonly teams: TeamsBridge) {
 		super();
@@ -58,6 +59,7 @@ export abstract class TeamsKey extends SingletonAction<KeySettings> {
 	override onWillDisappear(ev: WillDisappearEvent<KeySettings>): void {
 		this.#settings.delete(ev.action.id);
 		this.#drawn.delete(ev.action.id);
+		this.#overlays.delete(ev.action.id);
 	}
 
 	override onDidReceiveSettings(ev: DidReceiveSettingsEvent<KeySettings>): Promise<void> {
@@ -67,6 +69,13 @@ export abstract class TeamsKey extends SingletonAction<KeySettings> {
 
 	override onKeyDown(ev: KeyDownEvent<KeySettings>): Promise<void> {
 		return this.perform(ev.action, this.press(ev.payload.settings));
+	}
+
+	/** Draws a temporary overlay on one key, or clears it with `undefined`. */
+	protected setOverlay(action: Action<KeySettings>, overlay: KeyOverlay | undefined): Promise<void> {
+		if (overlay) this.#overlays.set(action.id, overlay);
+		else this.#overlays.delete(action.id);
+		return this.#draw(action);
 	}
 
 	/** Redraws every visible instance of this key; called whenever the meeting changes. */
@@ -79,7 +88,10 @@ export abstract class TeamsKey extends SingletonAction<KeySettings> {
 	async #draw(action: Action<KeySettings>): Promise<void> {
 		if (action.isKey()) {
 			const settings = this.#settings.get(action.id) ?? {};
-			const image = keyDataUrl(visualFor(this.kind, this.teams.snapshot, { reaction: settings.reaction }));
+			const image = keyDataUrl(
+				visualFor(this.kind, this.teams.snapshot, { reaction: settings.reaction }),
+				this.#overlays.get(action.id),
+			);
 			if (this.#drawn.get(action.id) === image) return;
 			this.#drawn.set(action.id, image);
 			await action.setImage(image);
