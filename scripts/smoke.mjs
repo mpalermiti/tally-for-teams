@@ -15,8 +15,8 @@ import { fileURLToPath } from "node:url";
 import { WebSocketServer } from "ws";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
-const pluginDir = join(root, "ai.michaelp.teams.sdPlugin");
-const UUID = "ai.michaelp.teams";
+const pluginDir = join(root, "ai.michaelp.tally.sdPlugin");
+const UUID = "ai.michaelp.tally";
 const DEVICE = "DECK1";
 
 const failures = [];

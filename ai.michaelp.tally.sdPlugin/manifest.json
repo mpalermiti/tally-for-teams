@@ -1,11 +1,12 @@
 {
 	"$schema": "https://schemas.elgato.com/streamdeck/plugins/manifest.json",
-	"Name": "Teams Controls",
+	"Name": "Tally for Teams",
 	"Version": "0.3.0.0",
 	"Author": "Michael Palermiti",
-	"Description": "Meeting controls for Microsoft Teams on Mac, with live state on every key. Works through macOS Accessibility, since Teams retired its local control API.",
-	"UUID": "ai.michaelp.teams",
-	"Category": "Teams Controls",
+	"Description": "Live Microsoft Teams meeting controls for Stream Deck on Mac. A lit key means it's live.",
+	"URL": "https://github.com/mpalermiti/tally-for-teams",
+	"UUID": "ai.michaelp.tally",
+	"Category": "Tally for Teams",
 	"CategoryIcon": "imgs/plugin/category-icon",
 	"Icon": "imgs/plugin/marketplace",
 	"CodePath": "bin/plugin.js",
@@ -25,7 +26,7 @@
 	"Actions": [
 		{
 			"Name": "Mute",
-			"UUID": "ai.michaelp.teams.mute",
+			"UUID": "ai.michaelp.tally.mute",
 			"Icon": "imgs/actions/mute/icon",
 			"Tooltip": "Toggle your microphone. Lit while your mic is live. On a Stream Deck+ dial: hold to talk, turn to mute or unmute.",
 			"Controllers": [
@@ -51,7 +52,7 @@
 		},
 		{
 			"Name": "Camera",
-			"UUID": "ai.michaelp.teams.camera",
+			"UUID": "ai.michaelp.tally.camera",
 			"Icon": "imgs/actions/camera/icon",
 			"Tooltip": "Toggle your camera. Lit while it is on.",
 			"Controllers": [
@@ -66,7 +67,7 @@
 		},
 		{
 			"Name": "Raise hand",
-			"UUID": "ai.michaelp.teams.hand",
+			"UUID": "ai.michaelp.tally.hand",
 			"Icon": "imgs/actions/hand/icon",
 			"Tooltip": "Raise or lower your hand (through the React menu).",
 			"Controllers": [
@@ -81,7 +82,7 @@
 		},
 		{
 			"Name": "Leave",
-			"UUID": "ai.michaelp.teams.leave",
+			"UUID": "ai.michaelp.tally.leave",
 			"Icon": "imgs/actions/leave/icon",
 			"Tooltip": "Leave the meeting. Red while you are in one.",
 			"Controllers": [
@@ -96,7 +97,7 @@
 		},
 		{
 			"Name": "React",
-			"UUID": "ai.michaelp.teams.react",
+			"UUID": "ai.michaelp.tally.react",
 			"Icon": "imgs/actions/react/icon",
 			"Tooltip": "Send a reaction to the meeting.",
 			"Controllers": [
@@ -112,7 +113,7 @@
 		},
 		{
 			"Name": "Chat",
-			"UUID": "ai.michaelp.teams.chat",
+			"UUID": "ai.michaelp.tally.chat",
 			"Icon": "imgs/actions/chat/icon",
 			"Tooltip": "Open or close meeting chat. Lit when there are unread messages.",
 			"Controllers": [
@@ -127,7 +128,7 @@
 		},
 		{
 			"Name": "Share",
-			"UUID": "ai.michaelp.teams.share",
+			"UUID": "ai.michaelp.tally.share",
 			"Icon": "imgs/actions/share/icon",
 			"Tooltip": "Open the share tray, or stop sharing while you are presenting. Lit while sharing.",
 			"Controllers": [

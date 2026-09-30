@@ -12,7 +12,7 @@ import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const lucide = join(root, "node_modules/lucide-static/icons");
-const pluginDir = join(root, "ai.michaelp.teams.sdPlugin");
+const pluginDir = join(root, "ai.michaelp.tally.sdPlugin");
 
 // Glyph name → Lucide icon file (or null for a custom glyph defined below).
 const LUCIDE: Record<string, string> = {

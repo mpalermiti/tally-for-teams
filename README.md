@@ -1,4 +1,4 @@
-# Teams Controls for Stream Deck
+# Tally for Teams
 
 Microsoft Teams meeting controls for Mac, with live state on every key. Works while Teams
 is in the background.
@@ -45,10 +45,10 @@ Requires a Mac, Stream Deck 7.1+, new Teams, Node.js, and Apple's command-line t
 (`xcode-select --install`) to compile the Accessibility helper.
 
 1. **Install.** Without npm (e.g. behind a corporate npm mirror), use the prebuilt package:
-   `open dist/ai.michaelp.teams.streamDeckPlugin`. Or build it yourself:
+   `open dist/ai.michaelp.tally.streamDeckPlugin`. Or build it yourself:
    ```bash
    npm install
-   npm run pack        # builds ai.michaelp.teams.streamDeckPlugin — double-click to install
+   npm run pack        # builds ai.michaelp.tally.streamDeckPlugin — double-click to install
    ```
    Or, for development, `npm run build && npm run link` (needs the Elgato CLI: `npm i -g @elgato/cli`).
 2. **Allow Accessibility:** press any Teams key. macOS asks to let **Stream Deck** control your
@@ -95,7 +95,7 @@ npm run sheet -- out.png   # render all keys in all states to one image
 
 CI (`.github/workflows/build.yml`) typechecks, tests, packs and smoke-tests on a Mac on every push
 to `main`, and keeps the package as a run artifact. That's how `dist/` is refreshed when npm is
-blocked locally: `gh run download --name ai.michaelp.teams.streamDeckPlugin --dir dist`.
+blocked locally: `gh run download --name ai.michaelp.tally.streamDeckPlugin --dir dist`.
 
 Probe Teams directly (terminal needs Accessibility permission; run during a meeting):
 

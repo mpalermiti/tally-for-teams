@@ -19,7 +19,7 @@ import { fileURLToPath } from "node:url";
 import { WebSocketServer } from "ws";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
-const UUID = "ai.michaelp.teams";
+const UUID = "ai.michaelp.tally";
 const dir = mkdtempSync(join(process.env.TMPDIR ?? tmpdir(), "teams-plugin-"));
 execFileSync("unzip", ["-q", join(root, "dist", `${UUID}.streamDeckPlugin`), "-d", dir]);
 const pluginDir = join(dir, `${UUID}.sdPlugin`);

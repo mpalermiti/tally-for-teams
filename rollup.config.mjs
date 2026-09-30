@@ -7,7 +7,7 @@ import url from "node:url";
 
 // Based on the `streamdeck create` template (@elgato/cli 1.10).
 const isWatching = !!process.env.ROLLUP_WATCH;
-const sdPlugin = "ai.michaelp.teams.sdPlugin";
+const sdPlugin = "ai.michaelp.tally.sdPlugin";
 
 /** @type {import('rollup').RollupOptions} */
 export default {
