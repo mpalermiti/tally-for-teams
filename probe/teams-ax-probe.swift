@@ -9,6 +9,7 @@
 //   swift probe/teams-ax-probe.swift                read-only scan (default)
 //   swift probe/teams-ax-probe.swift --watch        print mic/camera/hand state as it changes; Ctrl-C to stop
 //   swift probe/teams-ax-probe.swift --press-test   press Mute twice (toggles your mic, then restores it)
+//   swift probe/teams-ax-probe.swift --menus        open the React, More and video-options menus one by one, list their items, close them
 //   swift probe/teams-ax-probe.swift --full         also save every button in Teams (labels may include names)
 //
 // First run: macOS asks for Accessibility permission for your terminal app.
@@ -46,6 +47,7 @@ if flag("--help") || flag("-h") {
 let watchMode = flag("--watch")
 let pressTest = flag("--press-test")
 let fullDump = flag("--full")
+let menuTest = flag("--menus")
 let bundleIDs = option("--app").map { [$0] } ?? ["com.microsoft.teams2", "com.microsoft.teams"]
 
 // MARK: - What we're looking for
@@ -75,7 +77,7 @@ let capabilities: [(name: String, keywords: [String])] = [
 /// Only real controls. Chat messages and list rows are also "pressable" in Teams, so
 /// pressability alone would sweep in message text and names.
 let controlRoles: Set<String> = [
-	"AXButton", "AXCheckBox", "AXRadioButton", "AXMenuButton", "AXPopUpButton", "AXToggle", "AXSwitch",
+	"AXButton", "AXCheckBox", "AXRadioButton", "AXMenuButton", "AXPopUpButton", "AXToggle", "AXSwitch", "AXMenuItem",
 ]
 
 // MARK: - Accessibility helpers
@@ -332,6 +334,42 @@ if pressTest {
 	print("  after restore: \(read())   (AXPress → \(restored == .success ? "ok" : "AXError \(restored.rawValue)"))")
 	print("  Teams stayed \(teamsIsFrontmost() ? "frontmost" : "in the background") during the test.")
 	print("  Pass = the label flips and flips back.")
+}
+
+// MARK: - 6b. Optional: menu contents
+
+if menuTest {
+	// Only controls that APPEAR after opening a menu are listed, so nothing from chat can show up.
+	print("\nMenus (each opens briefly in your meeting, then closes):")
+	for (id, name) in [("reaction-menu-button", "React"), ("callingButtons-showMoreBtn", "More"), ("video-button-configure", "Video options")] {
+		guard let button = first.controls.first(where: { $0.0.domIdentifier == id })?.1 else {
+			print("  \(name): button \(id) not found")
+			continue
+		}
+		let before = scanApp(axApp).controls.map(\.1)
+		AXUIElementPerformAction(button, kAXPressAction as CFString)
+		var fresh: [(Control, AXUIElement)] = []
+		for _ in 0..<15 {
+			Thread.sleep(forTimeInterval: 0.1)
+			fresh = scanApp(axApp).controls.filter { candidate in !before.contains { CFEqual($0, candidate.1) } }
+			if !fresh.isEmpty { Thread.sleep(forTimeInterval: 0.3); fresh = scanApp(axApp).controls.filter { c in !before.contains { CFEqual($0, c.1) } }; break }
+		}
+		print("  \(name) menu (\(fresh.count) items):")
+		for (control, _) in fresh { print("    \(show(control))") }
+
+		// Close it: press the button again; if the items are still there, send Escape to Teams.
+		AXUIElementPerformAction(button, kAXPressAction as CFString)
+		Thread.sleep(forTimeInterval: 0.4)
+		let stillOpen = scanApp(axApp).controls.contains { c in fresh.contains { CFEqual($0.1, c.1) } }
+		if stillOpen {
+			for down in [true, false] { CGEvent(keyboardEventSource: nil, virtualKey: 0x35, keyDown: down)?.postToPid(app.processIdentifier) }
+			Thread.sleep(forTimeInterval: 0.4)
+			let closed = !scanApp(axApp).controls.contains { c in fresh.contains { CFEqual($0.1, c.1) } }
+			print("    closed by: \(closed ? "Escape" : "NOTHING — close it by hand")")
+		} else if !fresh.isEmpty {
+			print("    closed by: pressing the button again")
+		}
+	}
 }
 
 // MARK: - 7. Optional: watch (the cheap way a plugin would poll)

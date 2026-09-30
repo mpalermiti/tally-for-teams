@@ -1,31 +1,36 @@
 # Teams Controls for Stream Deck
 
-Microsoft Teams meeting controls with live state on every key. Built on the local
-**third-party app API** that new Teams exposes, the same one Microsoft's discontinued
-plugin used, so there's no cloud service, account, or Graph permission involved.
+Microsoft Teams meeting controls for Mac, with live state on every key. Works while Teams
+is in the background.
+
+Microsoft retired Teams' local control API (the one its own Stream Deck plugin used) on
+June 30, 2026, with no replacement. This plugin instead works the way a screen reader does:
+through **macOS Accessibility** it reads Teams' meeting buttons ("Mute mic" / "Unmute mic")
+to know your state, and presses them when you press a key. There's no cloud service,
+account, or Graph permission involved, and it never reads chat or message content.
 
 ![Every key in every state](docs/keys.png)
 
-**One rule: a lit key means it's live.** Warm = your mic is hot, camera is on, hand is up,
-you're sharing, or chat has unread messages. Dark = off. Dimmed = not in a meeting
-(dimmer still = Teams isn't reachable). Leave turns red during a meeting. A red dot on
-mic and camera means the meeting is being recorded.
+**One rule: a lit key means it's live.** Warm = your mic is hot, camera is on, you're sharing,
+or chat has unread messages. Dark = off. Dimmed = not in a meeting (dimmer still = Teams isn't
+readable). Leave turns red during a meeting.
 
-| Key | Press | Lit when |
-|---|---|---|
-| Mute | toggle mic (also works on a Stream Deck+ dial, see below) | mic is live |
-| Camera | toggle camera | camera is on |
-| Background blur | toggle blur | blurred |
-| Raise hand | raise / lower | hand is up |
-| Leave | leave the meeting | (red during a meeting) |
-| React | send the reaction chosen in the key's settings | — |
-| Chat | open / close meeting chat | unread messages |
-| Share | open the share tray; while presenting, stop sharing | sharing |
+| Key | Press | Lit when | Status on Teams 26267 |
+|---|---|---|---|
+| Mute | toggle mic (also a Stream Deck+ dial, see below) | mic is live | ✅ verified |
+| Camera | toggle camera | camera is on | ✅ verified |
+| Leave | leave the meeting | (red during a meeting) | button verified |
+| Chat | open / close meeting chat | unread messages* | button verified |
+| Share | open the share tray; while presenting, stop sharing* | sharing* | button verified |
+| React | send the chosen reaction via the React menu* | — | menu labels unverified |
+| Raise hand | raise / lower via the React menu* | (not shown) | unverified |
+| Background blur | — | — | not supported yet |
+
+\* Based on expected labels; confirm with `swift probe/teams-ax-probe.swift --menus` (see below).
 
 ### Stream Deck+ dial
 
-Put **Mute** on a dial and its strip shows a large **Live** or **Muted**, with what holding will
-do, or a recording warning.
+Put **Mute** on a dial and its strip shows a large **Live** or **Muted**, with what holding will do.
 
 - **Tap** the dial: toggle mute.
 - **Hold** the dial: flip the mic only while held. Muted, it's push-to-talk; live, it's a cough button.
@@ -34,47 +39,73 @@ do, or a recording warning.
 
 ## Setup
 
-Requires Stream Deck 7.1+ and new Teams.
+Requires a Mac, Stream Deck 7.1+, new Teams, Node.js, and Apple's command-line tools
+(`xcode-select --install`) to compile the Accessibility helper.
 
-1. **Turn on the Teams API:** Teams → Settings → Privacy → Third-party app API → Manage API → **Enable API**.
-2. **Install the plugin:**
+1. **Build and install:**
    ```bash
    npm install
    npm run pack        # builds ai.michaelp.teams.streamDeckPlugin — double-click to install
    ```
    Or, for development, `npm run build && npm run link` (needs the Elgato CLI: `npm i -g @elgato/cli`).
-3. **Pair:** drag some keys onto your deck, join a meeting, press any key. Teams asks to allow
-   "Teams Controls"; click Allow. The token is saved, so this happens once.
+2. **Allow Accessibility:** press any Teams key. macOS asks to let **Stream Deck** control your
+   computer; turn it on in System Settings → Privacy & Security → Accessibility. Until then,
+   keys stay dimmed and the dial says *Allow / Accessibility*.
+3. Join a meeting.
 
-Teams only lets apps pair *during a meeting*. Until you pair, keys show connection state but
-Teams won't report meeting state.
+## How it works
+
+```
+Stream Deck ──▶ plugin (Node, src/)  ──stdin/stdout JSON──▶  teams-bridge (Swift, bridge/)  ──Accessibility──▶ Teams
+                 knows what buttons mean                        finds buttons by web id,
+                 (src/teams/selectors.ts)                       reads labels, presses them
+```
+
+- **Finding the controls:** Teams exposes its accessibility tree only to assistive tech, so the
+  helper sets the same switch VoiceOver does (`AXEnhancedUserInterface`) while it runs, and turns
+  it off when it quits.
+- **Keeping up with state:** it finds the toolbar buttons once, then re-reads just those every
+  half second (about 0 ms). A full rescan (50–450 ms) only happens when the toolbar changes.
+- **When Teams changes its interface:** button ids and label rules all live in
+  `src/teams/selectors.ts`. The probe (`probe/teams-ax-probe.swift`) shows what the current Teams
+  exposes.
 
 ## Development
 
 ```bash
-npm test            # unit tests: Teams client (against a fake Teams), key/dial visuals, dial gestures
+npm test            # unit tests: selectors, bridge process handling, key/dial visuals, dial gestures
 npm run typecheck
-npm run build       # bundle to ai.michaelp.teams.sdPlugin/bin/plugin.js
-npm run smoke       # end-to-end: runs the built plugin against a fake Stream Deck + fake Teams
+npm run build       # compiles bin/teams-bridge (Swift) and bundles bin/plugin.js
+npm run smoke       # end-to-end: the built plugin against a fake Stream Deck + scripted bridge
 npm run watch       # rebuild + restart the plugin in Stream Deck on save
 npm run icons       # regenerate glyphs.ts and every PNG after design changes
 npm run sheet -- out.png   # render all keys in all states to one image
 ```
 
-`npm run smoke` needs port 8124 free, so quit Teams first.
+Probe Teams directly (terminal needs Accessibility permission; run during a meeting):
+
+```bash
+swift probe/teams-ax-probe.swift              # list the meeting toolbar's buttons
+swift probe/teams-ax-probe.swift --watch      # live mute/camera labels; Ctrl-C to stop
+swift probe/teams-ax-probe.swift --press-test # press mute twice (mic blips on, then back)
+swift probe/teams-ax-probe.swift --menus      # list what the React / More / video-options menus offer
+```
 
 ```
-src/teams/protocol.ts   wire types for the Teams local API (ws://127.0.0.1:8124, protocol 2.0.0)
-src/teams/client.ts     one shared connection: pairing token, reconnect, request/response
-src/render/key.ts       meeting state → key visual (pure), and the SVG key design
-src/actions/            one class per key; shared behaviour in teams-key.ts, dial gestures in gestures.ts
-src/plugin.ts           wiring: load the saved token, register keys, redraw on change
+bridge/TeamsBridge.swift   Accessibility helper: watch ids, press, open-menu-and-press
+src/teams/selectors.ts     Teams knowledge: button ids, what labels mean, action → command
+src/teams/bridge.ts        runs the helper: status → snapshot, requests, restarts
+src/teams/protocol.ts      the meeting model keys render from
+src/render/key.ts          meeting state → key visual (pure), and the SVG key design
+src/actions/               one class per key; shared behaviour in teams-key.ts, dial gestures in gestures.ts
+src/plugin.ts              wiring: start the helper, register keys, redraw on change
 ```
 
 ## Notes
 
-- **Token storage:** the pairing token lives in Stream Deck's plugin settings on disk. It only
-  lets a local process control your meetings; revoke it anytime in Teams' Manage API screen.
-- **What the API can't do:** join meetings, set presence, or read chat or calendar. Those need
-  Microsoft Graph and an Entra app registration, which this plugin deliberately avoids.
+- **Privacy:** the helper only reads buttons, toggles and menu items, never messages, chat rows
+  or window titles. Menu items are matched only if they appeared after the plugin opened the
+  menu, so a chat message's "Like" can never be pressed.
+- **Limits:** it can only use what Teams shows on screen, so it can't join meetings, set presence
+  or read your calendar. A Teams interface update can break a button until `selectors.ts` is updated.
 - Glyphs from [Lucide](https://lucide.dev) (ISC); `wow` and `blur` are custom on the same grid.
