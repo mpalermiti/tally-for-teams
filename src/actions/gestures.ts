@@ -68,7 +68,7 @@ export class HoldToConfirm {
 
 	constructor(
 		private readonly holdMs = HOLD_TO_LEAVE_MS,
-		private readonly now: () => number = Date.now,
+		private readonly now: () => number = () => performance.now(),
 	) {}
 
 	start(): void {

@@ -10,7 +10,7 @@ import {
 	type WillDisappearEvent,
 } from "@elgato/streamdeck";
 
-import { muteDialFeedback } from "../render/key";
+import { muteDialFeedback, visualFor } from "../render/key";
 import { HOLD_TO_LEAVE_MS, HoldToConfirm, HoldToggle, RotateToggle } from "./gestures";
 import { TeamsKey, type KeySettings } from "./teams-key";
 
@@ -68,6 +68,7 @@ export class HandKey extends TeamsKey {
 	protected press = () => this.teams.request("toggle-hand");
 }
 
+/** Leaves the meeting; the optional hold only applies while you're in a meeting. */
 @action({ UUID: "ai.michaelp.tally.leave" })
 export class LeaveKey extends TeamsKey {
 	readonly kind = "leave";
@@ -80,7 +81,9 @@ export class LeaveKey extends TeamsKey {
 
 	override onKeyDown(ev: KeyDownEvent<KeySettings>): Promise<void> {
 		// A multi-action sends down and up together, so it can't be held.
-		if (!ev.payload.settings.holdToLeave || ev.payload.isInMultiAction) return super.onKeyDown(ev);
+		if (!ev.payload.settings.holdToLeave || ev.payload.isInMultiAction || visualFor(this.kind, this.teams.snapshot).tone !== "danger") {
+			return super.onKeyDown(ev);
+		}
 		this.#stop(ev.action.id);
 		this.#hintSerials.delete(ev.action.id);
 		const hold = new HoldToConfirm(HOLD_TO_LEAVE_MS);
