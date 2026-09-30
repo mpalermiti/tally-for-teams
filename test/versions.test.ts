@@ -11,6 +11,10 @@ describe("versionProblem", () => {
 		expect(versionProblem("1.0.0.0", "1.0.0-rc.1")).toBeUndefined();
 	});
 
+	it("ignores build metadata too", () => {
+		expect(versionProblem("1.0.0.0", "1.0.0+build.5")).toBeUndefined();
+	});
+
 	it("flags a manifest that disagrees", () => {
 		expect(versionProblem("0.3.0.0", "1.0.0")).toMatch(/manifest\.json says 0\.3\.0\.0/);
 	});
