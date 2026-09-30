@@ -1,4 +1,5 @@
 node_modules/
+build/
 *.sdPlugin/bin
 *.sdPlugin/logs
 *.streamDeckPlugin
