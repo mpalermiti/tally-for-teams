@@ -19,4 +19,16 @@ describe("manifest", () => {
 	it("doesn't offer keys that can't work yet", () => {
 		expect(uuids).not.toContain("ai.michaelp.tally.blur");
 	});
+
+	it("gives Leave a settings page", () => {
+		const leave = manifest.Actions.find((a: { UUID: string }) => a.UUID === "ai.michaelp.tally.leave");
+		expect(leave.PropertyInspectorPath).toBe("ui/leave.html");
+	});
+
+	it("keeps every settings page working offline", () => {
+		for (const { PropertyInspectorPath: page } of manifest.Actions.filter((a: { PropertyInspectorPath?: string }) => a.PropertyInspectorPath)) {
+			const html = readFileSync(new URL(`../ai.michaelp.tally.sdPlugin/${page}`, import.meta.url), "utf8");
+			expect(html, page).not.toMatch(/src="https?:/);
+		}
+	});
 });

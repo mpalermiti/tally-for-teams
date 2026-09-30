@@ -88,6 +88,7 @@
 			"Controllers": [
 				"Keypad"
 			],
+			"PropertyInspectorPath": "ui/leave.html",
 			"States": [
 				{
 					"Image": "imgs/actions/leave/key",
