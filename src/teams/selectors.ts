@@ -8,7 +8,7 @@
  * Confirmed on Teams 26267 for Mac (2026-09-29) with probe/teams-ax-probe.swift:
  * toolbar and React-menu ids, the mute and camera labels, and pressing and reading
  * with Teams in the background. With probe/teams-ax-diff.swift: the "Stop sharing"
- * label and how a raised hand restyles React.
+ * label and how a raised hand restyles React, both confirmed lighting their keys live.
  * Marked UNVERIFIED below: guesses awaiting a probe run.
  */
 
@@ -129,7 +129,7 @@ export function snapshotFrom(status: BridgeStatus): Snapshot {
  * restyles the button: at rest React looks exactly like the plain toolbar buttons, raised it
  * doesn't. The compact view restyles its own raise-hand button instead. Comparing with the
  * plain buttons avoids depending on Teams' generated class names, which change between builds.
- * Confirmed on Teams 26267 (2026-09-29) with probe/teams-ax-diff.swift.
+ * Found on Teams 26267 with probe/teams-ax-diff.swift; confirmed lighting the key in a live meeting (2026-09-29).
  */
 function handRaised(status: BridgeStatus): boolean {
 	const resting = restingStyle(status);

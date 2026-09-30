@@ -21,9 +21,9 @@ Teams isn't readable). Leave turns red during a meeting.
 | Camera | toggle camera | camera is on | ✅ verified |
 | Leave | leave the meeting | (red during a meeting) | button verified |
 | Chat | open / close meeting chat | unread messages* | button verified |
-| Share | open the share tray; while presenting, stop sharing* | sharing | "Stop sharing" label verified |
+| Share | open the share tray; while presenting, stop sharing* | sharing | ✅ verified |
 | React | send the chosen reaction (Like, Love, Applause, Laugh, Wow) via the React menu | — | menu item ids verified |
-| Raise hand | raise / lower via the React menu | hand is up† | menu item id and styling verified |
+| Raise hand | raise / lower via the React menu | hand is up† | ✅ verified |
 
 \* Unverified: the unread-messages label, and that pressing Stop sharing stops it.
 † Teams says whether your hand is up only in a hover tooltip, but it restyles the React button
@@ -60,18 +60,25 @@ Requires a Mac, Stream Deck 7.1+, new Teams, Node.js, and Apple's command-line t
 
 ```
 Stream Deck ──▶ plugin (Node, src/)  ──stdin/stdout JSON──▶  teams-bridge (Swift, bridge/)  ──Accessibility──▶ Teams
-                 knows what buttons mean                        finds buttons by web id,
-                 (src/teams/selectors.ts)                       reads labels, presses them
+                 knows what buttons mean                        finds buttons by web id, reads
+                 (src/teams/selectors.ts)                       labels and styles, presses them
 ```
 
 - **Finding the controls:** Teams exposes its accessibility tree only to assistive tech, so the
   helper sets the same switch VoiceOver does (`AXEnhancedUserInterface`) while it runs, and turns
   it off when it quits.
+- **One window at a time:** a meeting can have a full window and a compact view that swap in and
+  out. The helper takes every button from the one window holding the mic button and the most of
+  the others, so the two toolbars are never mixed.
 - **Keeping up with state:** it finds the toolbar buttons once, then re-reads just those every
-  half second (about 0 ms). A full rescan (50–450 ms) only happens when the toolbar changes.
+  half second (about 0 ms). A full rescan (50–450 ms) happens within 2 s of any watched button
+  going stale (Teams rebuilds the toolbar when sharing starts), and every 10 s in a meeting.
+- **State Teams only shows as styling:** a raised hand keeps React's label; only its look
+  changes. The plugin compares React with the plain toolbar buttons instead of matching Teams'
+  generated class names, which change between builds.
 - **When Teams changes its interface:** button ids and label rules all live in
-  `src/teams/selectors.ts`. The probe (`probe/teams-ax-probe.swift`) shows what the current Teams
-  exposes.
+  `src/teams/selectors.ts`. The probes show what the current Teams exposes: `teams-ax-probe.swift`
+  lists the toolbar, and `teams-ax-diff.swift` prints what changes as you do something.
 
 ## Development
 
@@ -113,9 +120,9 @@ src/plugin.ts              wiring: start the helper, register keys, redraw on ch
 
 ## Notes
 
-- **Privacy:** the helper only reads buttons, toggles and menu items, never messages, chat rows
-  or window titles. Menu items are matched only if they appeared after the plugin opened the
-  menu, so a chat message's "Like" can never be pressed.
+- **Privacy:** the helper only reads buttons, toggles and menu items (their labels and styling),
+  never messages, chat rows or window titles. Menu items are matched only if they appeared after
+  the plugin opened the menu, so a chat message's "Like" can never be pressed.
 - **Limits:** it can only use what Teams shows on screen, so it can't join meetings, set presence
   or read your calendar. A Teams interface update can break a button until `selectors.ts` is updated.
 - Glyphs from [Lucide](https://lucide.dev) (ISC); `wow` is custom on the same grid.
