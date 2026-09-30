@@ -1,5 +1,5 @@
-import type { Snapshot } from "../teams/client";
-import { EMPTY_STATE, NO_PERMISSIONS, type Reaction } from "../teams/protocol";
+import type { Snapshot } from "../teams/protocol";
+import { EMPTY_STATE, NO_PERMISSIONS, type OfflineReason, type Reaction } from "../teams/protocol";
 import { GLYPHS, type GlyphName } from "./glyphs";
 
 /**
@@ -155,13 +155,19 @@ export interface DialFeedback {
 	detail: { value: string; color: string };
 }
 
+const OFFLINE_TEXT: Record<OfflineReason, [string, string]> = {
+	"no-permission": ["Allow", "Accessibility"],
+	"teams-not-running": ["Teams", "Not running"],
+	starting: ["Teams", "Connecting"],
+};
+
 /** Face and words for the mute dial's slice of the touch strip. */
 export function muteDialFeedback(snapshot: Snapshot): DialFeedback {
 	const visual = visualFor("mute", snapshot);
 	const { state } = snapshot;
 
 	const [label, detail] =
-		visual.tone === "offline" ? ["Teams", "Not connected"]
+		visual.tone === "offline" ? OFFLINE_TEXT[snapshot.reason ?? "starting"]
 		: visual.tone === "idle" ? ["Mic", state.isInMeeting ? "Not available" : "No meeting"]
 		: visual.recording ? [state.isMuted ? "Muted" : "Live", "Recording"]
 		: state.isMuted ? ["Muted", "Hold to talk"]

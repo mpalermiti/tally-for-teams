@@ -11,7 +11,8 @@ import streamDeck, {
 } from "@elgato/streamdeck";
 
 import { keyDataUrl, visualFor, type KeyKind } from "../render/key";
-import type { RequestResult, TeamsClient } from "../teams/client";
+import type { TeamsBridge } from "../teams/bridge";
+import type { RequestResult } from "../teams/protocol";
 import type { Reaction } from "../teams/protocol";
 
 export type KeySettings = { reaction?: Reaction };
@@ -27,7 +28,7 @@ export abstract class TeamsKey extends SingletonAction<KeySettings> {
 	#settings = new Map<string, KeySettings>();
 	#drawn = new Map<string, string>();
 
-	constructor(protected readonly teams: TeamsClient) {
+	constructor(protected readonly teams: TeamsBridge) {
 		super();
 	}
 

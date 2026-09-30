@@ -1,22 +1,19 @@
 import streamDeck from "@elgato/streamdeck";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { BlurKey, CameraKey, ChatKey, HandKey, LeaveKey, MuteKey, ReactKey, ShareKey } from "./actions/keys";
-import { TeamsClient } from "./teams/client";
+import { TeamsBridge } from "./teams/bridge";
 
-// Keep in step with "Version" in manifest.json. Teams shows it in its list of connected apps.
-const VERSION = "0.2.0";
-
-type GlobalSettings = { teamsToken?: string };
-
-// Never "trace": that logs every message to disk, including the pairing token.
 streamDeck.logger.setLevel("info");
 
-const teams = new TeamsClient({
-	identity: { manufacturer: "michaelp.ai", device: "Stream Deck", app: "Teams Controls", appVersion: VERSION },
-	onToken: (teamsToken) => {
-		streamDeck.logger.info("Paired with Teams; saving token");
-		void streamDeck.settings.setGlobalSettings<GlobalSettings>({ teamsToken });
-	},
+// The Swift helper is built next to this bundle (bin/teams-bridge). TEAMS_BRIDGE overrides it
+// for the end-to-end smoke test, which substitutes a scripted fake.
+const bridgePath = process.env.TEAMS_BRIDGE ?? join(dirname(fileURLToPath(import.meta.url)), "teams-bridge");
+
+const teams = new TeamsBridge({
+	command: bridgePath,
+	log: (message) => streamDeck.logger.info(`bridge: ${message}`),
 });
 
 const keys = [
@@ -31,15 +28,15 @@ const keys = [
 ];
 for (const key of keys) streamDeck.actions.registerAction(key);
 
-let wasOnline = false;
+let lastReason: string | undefined = "starting";
 teams.on("change", (snapshot) => {
-	if (snapshot.online !== wasOnline) {
-		wasOnline = snapshot.online;
-		streamDeck.logger.info(snapshot.online ? "Connected to Teams" : "Teams unreachable; retrying");
+	const reason = snapshot.online ? (snapshot.state.isInMeeting ? "in a meeting" : "connected") : snapshot.reason;
+	if (reason !== lastReason) {
+		lastReason = reason;
+		streamDeck.logger.info(`Teams: ${reason}`);
 	}
 	for (const key of keys) void key.refresh();
 });
 
 await streamDeck.connect();
-const { teamsToken } = await streamDeck.settings.getGlobalSettings<GlobalSettings>();
-teams.start(teamsToken);
+teams.start();

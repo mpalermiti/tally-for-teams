@@ -1,12 +1,13 @@
 /**
- * End-to-end smoke test of the BUILT plugin (bin/plugin.js), no hardware needed.
+ * End-to-end smoke test of the BUILT plugin (bin/plugin.js), no hardware or Teams needed.
  *
- * Plays both counterparts: a fake Stream Deck app (launches the plugin with the
- * real CLI arguments and speaks its WebSocket protocol) and a fake Teams on
- * port 8124. Then walks through: draw offline → Teams comes up → meeting starts →
- * key press → pairing token saved.
+ * Plays both counterparts: a fake Stream Deck app (launches the plugin with the real
+ * CLI arguments and speaks its WebSocket protocol) and the Accessibility bridge, via
+ * scripts/fake-bridge.mjs, answering the way bin/teams-bridge does on a Mac with Teams
+ * (button ids and labels as seen on Teams 26267). Walks through: no permission →
+ * meeting → key presses → reactions → the Stream Deck+ dial → bridge crash and recovery.
  *
- * Usage: npm run build && npm run smoke   (8124 must be free, i.e. Teams closed)
+ * Usage: npm run build && npm run smoke
  */
 import { spawn } from "node:child_process";
 import { dirname, join } from "node:path";
@@ -31,47 +32,69 @@ const until = async (predicate, label, timeoutMs = 5000) => {
 	}
 	check(true, label);
 };
-const listen = (port) =>
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const listen = () =>
 	new Promise((resolve, reject) => {
-		const server = new WebSocketServer({ host: "127.0.0.1", port });
+		const server = new WebSocketServer({ host: "127.0.0.1", port: 0 });
 		server.once("listening", () => resolve(server));
 		server.once("error", reject);
 	});
 
 // ── Fake Stream Deck ─────────────────────────────────────────────
-const deck = await listen(0);
+const deck = await listen();
 const fromPlugin = [];
 let pluginSocket;
-let globalSettings = {};
 deck.on("connection", (socket) => {
 	pluginSocket = socket;
-	socket.on("message", (data) => {
-		const msg = JSON.parse(data.toString());
-		fromPlugin.push(msg);
-		if (msg.event === "getGlobalSettings") {
-			socket.send(JSON.stringify({ event: "didReceiveGlobalSettings", payload: { settings: globalSettings } }));
-		}
-		if (msg.event === "setGlobalSettings") globalSettings = msg.payload;
-	});
+	socket.on("message", (data) => fromPlugin.push(JSON.parse(data.toString())));
 });
 const toPlugin = (msg) => pluginSocket.send(JSON.stringify(msg));
-const key = (kind, context, extra = {}) => ({
-	action: `${UUID}.${kind}`,
-	context,
-	device: DEVICE,
-	...extra,
-});
-const keyPayload = (settings = {}) => ({
-	settings,
-	coordinates: { column: 0, row: 0 },
-	controller: "Keypad",
-	isInMultiAction: false,
-	state: 0,
-});
-const imagesFor = (context) => fromPlugin.filter((m) => m.event === "setImage" && m.context === context);
+const event = (name, kind, context, payload) => toPlugin({ event: name, action: `${UUID}.${kind}`, context, device: DEVICE, payload });
+const keyPayload = (settings = {}) => ({ settings, coordinates: { column: 0, row: 0 }, controller: "Keypad", isInMultiAction: false, state: 0 });
+const dialPayload = { settings: {}, coordinates: { column: 0, row: 0 }, controller: "Encoder", isInMultiAction: false };
 const lastImage = (context) => {
-	const all = imagesFor(context);
+	const all = fromPlugin.filter((m) => m.event === "setImage" && m.context === context);
 	return all.length ? Buffer.from(all.at(-1).payload.image.split(",")[1], "base64").toString() : "";
+};
+const feedback = (context) => fromPlugin.filter((m) => m.event === "setFeedback" && m.context === context).at(-1)?.payload;
+const alerts = (context) => fromPlugin.filter((m) => m.event === "showAlert" && m.context === context).length;
+
+// ── Fake Accessibility bridge ────────────────────────────────────
+const bridge = await listen();
+const toBridge = []; // commands the plugin sent the helper
+let bridgeSocket;
+let connections = 0;
+bridge.on("connection", (socket) => {
+	bridgeSocket = socket;
+	connections++;
+	socket.on("message", (data) => toBridge.push(JSON.parse(data.toString())));
+});
+const TOOLBAR = {
+	"microphone-button": "Mute mic",
+	"video-button": "Turn camera on",
+	"share-button": "Share",
+	"reaction-menu-button": "React",
+	"chat-button": "Chat",
+	"hangup-button": "Leave",
+};
+let buttons = { ...TOOLBAR };
+const status = (extra = {}) =>
+	bridgeSocket.send(
+		JSON.stringify({
+			type: "status",
+			trusted: true,
+			running: true,
+			buttons: Object.fromEntries(Object.entries(buttons).map(([id, label]) => [id, { label, enabled: true }])),
+			...extra,
+		}),
+	);
+const commands = (cmd) => toBridge.filter((m) => m.cmd === cmd);
+const reply = (command, ok = true, message = "pressed") => bridgeSocket.send(JSON.stringify({ type: "result", req: command.req, ok, message }));
+/** Answers the latest press like Teams would: flips the mic label. */
+const pressMic = (live) => {
+	reply(commands("press").at(-1));
+	buttons["microphone-button"] = live ? "Mute mic" : "Unmute mic";
+	status();
 };
 
 // ── Launch the plugin like Stream Deck does ──────────────────────
@@ -79,130 +102,101 @@ const info = {
 	application: { font: "", language: "en", platform: "mac", platformVersion: "15.0", version: "7.1.0.0" },
 	colors: {},
 	devicePixelRatio: 2,
-	devices: [{ id: DEVICE, name: "Stream Deck", size: { columns: 5, rows: 3 }, type: 0 }],
-	plugin: { uuid: UUID, version: "0.1.0.0" },
+	devices: [{ id: DEVICE, name: "Stream Deck +", size: { columns: 4, rows: 2 }, type: 7 }],
+	plugin: { uuid: UUID, version: "0.3.0.0" },
 };
 const plugin = spawn(
 	process.execPath,
 	["bin/plugin.js", "-port", String(deck.address().port), "-pluginUUID", UUID, "-registerEvent", "registerPlugin", "-info", JSON.stringify(info)],
-	{ cwd: pluginDir, stdio: ["ignore", "inherit", "inherit"] },
+	{
+		cwd: pluginDir,
+		stdio: ["ignore", "inherit", "inherit"],
+		env: { ...process.env, TEAMS_BRIDGE: join(root, "scripts/fake-bridge.mjs"), FAKE_BRIDGE_URL: `ws://127.0.0.1:${bridge.address().port}` },
+	},
 );
 
-let teams;
 try {
 	await until(() => fromPlugin.some((m) => m.event === "registerPlugin"), "plugin registers with Stream Deck");
-	await until(() => fromPlugin.some((m) => m.event === "getGlobalSettings"), "plugin asks for its saved token");
+	await until(() => commands("watch").length === 1, "plugin starts the bridge and asks it to watch the toolbar");
+	check(commands("watch")[0].ids.includes("microphone-button"), "…including microphone-button");
 
-	toPlugin({ event: "willAppear", ...key("mute", "MUTE1", { payload: keyPayload() }) });
-	toPlugin({ event: "willAppear", ...key("react", "REACT1", { payload: keyPayload({ reaction: "love" }) }) });
-	await until(() => imagesFor("MUTE1").length > 0, "mute key draws while Teams is closed");
-	check(lastImage("MUTE1").includes("#3A3A42"), "…in the offline tone");
+	event("willAppear", "mute", "MUTE1", keyPayload());
+	event("willAppear", "react", "REACT1", keyPayload({ reaction: "love" }));
+	event("willAppear", "blur", "BLUR1", keyPayload());
+	event("willAppear", "mute", "DIAL1", dialPayload);
+	await until(() => lastImage("MUTE1").includes("#3A3A42"), "keys draw offline before the bridge reports");
+	await until(() => feedback("DIAL1")?.label?.value === "Teams", "dial says Teams / Connecting");
 
-	// Teams starts.
-	teams = await listen(8124);
-	const teamsUrls = [];
-	const toTeams = [];
-	let teamsSocket;
-	teams.on("connection", (socket, req) => {
-		teamsSocket = socket;
-		teamsUrls.push(new URL(req.url, "ws://x"));
-		socket.on("message", (d) => toTeams.push(JSON.parse(d.toString())));
-	});
-	await until(() => teamsUrls.length > 0, "plugin connects to Teams once it's running", 20000);
-	const q = teamsUrls[0].searchParams;
-	check(q.get("protocol-version") === "2.0.0" && q.get("app") === "Teams Controls" && !q.has("token"), "…unpaired, with protocol 2.0.0 and app identity");
+	// No Accessibility permission yet.
+	status({ trusted: false, buttons: {} });
+	await until(() => feedback("DIAL1")?.detail?.value === "Accessibility", "without permission the dial says Allow / Accessibility");
+	event("keyDown", "mute", "MUTE1", keyPayload());
+	await until(() => commands("prompt").length === 1, "pressing a key asks macOS for permission");
+	await until(() => alerts("MUTE1") === 1, "…and flashes an alert");
 
-	// Meeting starts, mic live.
-	teamsSocket.send(
-		JSON.stringify({
-			meetingUpdate: {
-				meetingState: { isInMeeting: true, isMuted: false, isRecordingOn: true },
-				meetingPermissions: { canToggleMute: true, canReact: true, canPair: true },
-			},
-		}),
-	);
-	await until(() => lastImage("MUTE1").includes("radialGradient"), "mute key lights up when the mic is live");
-	check(lastImage("MUTE1").includes('data-badge="recording"'), "…with the recording badge");
-	await until(() => lastImage("REACT1").includes("#EDEDF0"), "react key becomes ready");
+	// Permission granted, in a meeting, mic live.
+	status();
+	await until(() => lastImage("MUTE1").includes("radialGradient"), "mute key lights up when the label says Mute mic (live)");
+	await until(() => feedback("DIAL1")?.label?.value === "Live", "dial says Live");
 
-	// Press mute → Teams gets toggle-mute, replies with a token (pairing), then state flips.
-	toPlugin({ event: "keyDown", ...key("mute", "MUTE1", { payload: keyPayload() }) });
-	await until(() => toTeams.some((m) => m.action === "toggle-mute"), "pressing mute sends toggle-mute to Teams");
-	const req = toTeams.find((m) => m.action === "toggle-mute");
-	teamsSocket.send(JSON.stringify({ tokenRefresh: "paired-token-123" }));
-	teamsSocket.send(JSON.stringify({ requestId: req.requestId, response: "Success" }));
-	teamsSocket.send(JSON.stringify({ meetingUpdate: { meetingState: { isMuted: true } } }));
-	await until(() => globalSettings.teamsToken === "paired-token-123", "pairing token is saved to Stream Deck");
-	await until(() => lastImage("MUTE1").includes("#8A8A94"), "mute key goes dark once muted");
-	check(!fromPlugin.some((m) => m.event === "showAlert" && m.context === "MUTE1"), "no alert on a successful press");
+	event("keyDown", "mute", "MUTE1", keyPayload());
+	await until(() => commands("press").some((c) => c.id === "microphone-button"), "pressing mute presses microphone-button");
+	pressMic(false);
+	await until(() => lastImage("MUTE1").includes("#8A8A94"), "mute key goes dark when the label flips to Unmute mic");
+	check(alerts("MUTE1") === 1, "no alert on a successful press");
 
-	// Stream Deck+ dial on the same Mute action.
-	const feedbackFor = (context) => fromPlugin.filter((m) => m.event === "setFeedback" && m.context === context).at(-1)?.payload;
-	const toggles = () => toTeams.filter((m) => m.action === "toggle-mute").length;
-	const answer = (muted) => {
-		const last = toTeams.filter((m) => m.action === "toggle-mute").at(-1);
-		teamsSocket.send(JSON.stringify({ requestId: last.requestId, response: "Success" }));
-		teamsSocket.send(JSON.stringify({ meetingUpdate: { meetingState: { isMuted: muted } } }));
-	};
-	const dialPayload = { settings: {}, coordinates: { column: 0, row: 0 }, controller: "Encoder", isInMultiAction: false };
-	toPlugin({ event: "willAppear", ...key("mute", "DIAL1", { payload: dialPayload }) });
-	await until(() => feedbackFor("DIAL1")?.label?.value === "Muted", "mute dial's strip says Muted");
-	check(feedbackFor("DIAL1")?.detail?.value === "Recording", "…and warns that the meeting is recording");
+	// Reactions go through the React menu.
+	event("keyDown", "react", "REACT1", keyPayload({ reaction: "love" }));
+	await until(() => commands("menu").length === 1, "react key opens the React menu");
+	const menu = commands("menu")[0];
+	check(menu.id === "reaction-menu-button" && menu.labels.includes("heart"), "…looking for Heart");
+	reply(menu, false, "No heart/love in reaction-menu-button menu; it offered: nothing");
+	await until(() => alerts("REACT1") === 1, "a missing menu item flashes an alert");
 
-	// Hold to talk: press unmutes at once, release after a hold re-mutes.
-	let before = toggles();
-	toPlugin({ event: "dialDown", ...key("mute", "DIAL1", { payload: dialPayload }) });
-	await until(() => toggles() === before + 1, "pressing the dial toggles mute immediately");
-	answer(false);
-	await until(() => feedbackFor("DIAL1")?.label?.value === "Live", "strip switches to Live");
-	await new Promise((r) => setTimeout(r, 500));
-	toPlugin({ event: "dialUp", ...key("mute", "DIAL1", { payload: dialPayload }) });
-	await until(() => toggles() === before + 2, "releasing after a hold re-mutes (push-to-talk)");
-	answer(true);
-	await until(() => feedbackFor("DIAL1")?.label?.value === "Muted", "strip back to Muted");
+	// Blur isn't supported: alert, and the helper is never asked.
+	const before = toBridge.length;
+	event("keyDown", "blur", "BLUR1", keyPayload());
+	await until(() => alerts("BLUR1") === 1, "blur key alerts (not supported yet)");
+	check(toBridge.length === before, "…without bothering the bridge");
 
-	// Tap: press + quick release leaves it toggled.
-	before = toggles();
-	toPlugin({ event: "dialDown", ...key("mute", "DIAL1", { payload: dialPayload }) });
-	toPlugin({ event: "dialUp", ...key("mute", "DIAL1", { payload: dialPayload }) });
-	await new Promise((r) => setTimeout(r, 300));
-	check(toggles() === before + 1, "a quick tap toggles once");
-	answer(false);
-	await until(() => feedbackFor("DIAL1")?.label?.value === "Live", "…leaving the mic live");
+	// Stream Deck+ dial: hold to talk.
+	let presses = commands("press").length;
+	event("dialDown", "mute", "DIAL1", dialPayload);
+	await until(() => commands("press").length === presses + 1, "pressing the dial presses mute immediately");
+	pressMic(true);
+	await until(() => feedback("DIAL1")?.label?.value === "Live", "dial shows Live while held");
+	await sleep(500);
+	event("dialUp", "mute", "DIAL1", dialPayload);
+	await until(() => commands("press").length === presses + 2, "releasing after a hold mutes again (push-to-talk)");
+	pressMic(false);
+	await until(() => feedback("DIAL1")?.label?.value === "Muted", "dial back to Muted");
 
-	// Turn left mutes (once, despite a burst of ticks); turning left again while muted does nothing.
-	await new Promise((r) => setTimeout(r, 600));
-	before = toggles();
-	for (let i = 0; i < 3; i++)
-		toPlugin({ event: "dialRotate", ...key("mute", "DIAL1", { payload: { ...dialPayload, ticks: -1, pressed: false } }) });
-	await new Promise((r) => setTimeout(r, 300));
-	check(toggles() === before + 1, "turning left mutes exactly once for a burst of ticks");
-	answer(true);
-	await new Promise((r) => setTimeout(r, 600));
-	toPlugin({ event: "dialRotate", ...key("mute", "DIAL1", { payload: { ...dialPayload, ticks: -2, pressed: false } }) });
-	await new Promise((r) => setTimeout(r, 300));
-	check(toggles() === before + 1, "turning left while already muted does nothing");
+	// Turn right once (a burst of ticks) → one unmute.
+	await sleep(600);
+	presses = commands("press").length;
+	for (let i = 0; i < 3; i++) event("dialRotate", "mute", "DIAL1", { ...dialPayload, ticks: 1, pressed: false });
+	await sleep(300);
+	check(commands("press").length === presses + 1, "turning right unmutes exactly once for a burst of ticks");
+	pressMic(true);
 
-	// Reaction uses the key's setting.
-	toPlugin({ event: "keyDown", ...key("react", "REACT1", { payload: keyPayload({ reaction: "love" }) }) });
-	await until(
-		() => toTeams.some((m) => m.action === "send-reaction" && m.parameters.type === "love"),
-		"react key sends the configured reaction",
-	);
+	// Meeting ends: toolbar disappears.
+	buttons = {};
+	status();
+	await until(() => feedback("DIAL1")?.detail?.value === "No meeting", "dial says No meeting once the toolbar is gone");
 
-	// Teams refuses → alert.
-	const refused = toTeams.find((m) => m.action === "send-reaction");
-	teamsSocket.send(JSON.stringify({ requestId: refused.requestId, errorMsg: "Not allowed" }));
-	await until(() => fromPlugin.some((m) => m.event === "showAlert" && m.context === "REACT1"), "a refused action flashes an alert");
+	// Teams quits.
+	status({ running: false });
+	await until(() => feedback("DIAL1")?.detail?.value === "Not running", "dial says Not running when Teams quits");
 
-	// Teams quits → keys dim; restarts → reconnects with the saved token.
-	teamsSocket.terminate();
-	await until(() => lastImage("MUTE1").includes("#3A3A42"), "keys dim when Teams quits");
-	await until(() => teamsUrls.length > 1, "plugin reconnects when Teams returns", 20000);
-	check(teamsUrls.at(-1).searchParams.get("token") === "paired-token-123", "…using the saved token");
+	// The helper crashes; the plugin restarts it.
+	bridgeSocket.close();
+	await until(() => connections === 2 && commands("watch").length === 2, "plugin restarts a crashed bridge and re-sends watch", 8000);
+	buttons = { ...TOOLBAR };
+	status();
+	await until(() => feedback("DIAL1")?.label?.value === "Live", "…and recovers meeting state");
 } finally {
 	plugin.kill();
-	teams?.close();
+	bridge.close();
 	deck.close();
 }
 

@@ -1,13 +1,10 @@
 /**
- * Wire types for the Microsoft Teams "third-party app API" — the local WebSocket
- * that new Teams exposes at ws://127.0.0.1:8124 when Settings → Privacy →
- * Third-party app API is enabled. Protocol version 2.0.0.
+ * The plugin's model of a Teams meeting. Originally the wire types of Teams' local
+ * API (retired 2026-06-30); now filled in from Accessibility by src/teams/selectors.ts.
+ * Keys and the dial render from these types only.
  */
 
-export const TEAMS_PORT = 8124;
-export const PROTOCOL_VERSION = "2.0.0";
-
-/** Actions the plugin sends. Teams also accepts explicit mute/unmute etc., but toggles are all we need. */
+/** Actions a key can ask for. */
 export type TeamsAction =
 	| "toggle-mute"
 	| "toggle-video"
@@ -22,15 +19,26 @@ export type TeamsAction =
 export type Reaction = "like" | "love" | "applause" | "laugh" | "wow";
 export const REACTIONS: readonly Reaction[] = ["like", "love", "applause", "laugh", "wow"];
 
-/** `toggle-ui` targets. Note the tray is "sharing-tray", not "share-tray". */
+/** `toggle-ui` targets. */
 export type UiTarget = "chat" | "sharing-tray";
 
 export type ActionParameters = { type: Reaction | UiTarget } | Record<string, never>;
 
-export interface ClientMessage {
-	action: TeamsAction;
-	parameters: ActionParameters;
-	requestId: number;
+/** Why keys are dimmed while offline; shown in words on the Stream Deck+ dial. */
+export type OfflineReason = "no-permission" | "teams-not-running" | "starting";
+
+/** What every key renders from. Replaced (never mutated) on each change. */
+export interface Snapshot {
+	/** True while Teams is running and readable. */
+	online: boolean;
+	reason?: OfflineReason;
+	state: MeetingState;
+	permissions: MeetingPermissions;
+}
+
+export interface RequestResult {
+	ok: boolean;
+	message: string;
 }
 
 export interface MeetingState {
@@ -55,18 +63,6 @@ export interface MeetingPermissions {
 	canToggleChat: boolean;
 	canStopSharing: boolean;
 	canPair: boolean;
-}
-
-/** Everything Teams can send us. Exactly one of these fields is normally present. */
-export interface ServerMessage {
-	requestId?: number;
-	response?: string;
-	errorMsg?: string;
-	tokenRefresh?: string;
-	meetingUpdate?: {
-		meetingState?: Partial<MeetingState>;
-		meetingPermissions?: Partial<MeetingPermissions>;
-	};
 }
 
 export const EMPTY_STATE: MeetingState = {

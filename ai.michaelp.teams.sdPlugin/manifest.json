@@ -1,9 +1,9 @@
 {
 	"$schema": "https://schemas.elgato.com/streamdeck/plugins/manifest.json",
 	"Name": "Teams Controls",
-	"Version": "0.2.0.0",
+	"Version": "0.3.0.0",
 	"Author": "Michael Palermiti",
-	"Description": "Meeting controls for Microsoft Teams with live state on every key: mute, camera, blur, hand, reactions, chat, share, leave.",
+	"Description": "Meeting controls for Microsoft Teams on Mac, with live state on every key. Works through macOS Accessibility, since Teams retired its local control API.",
 	"UUID": "ai.michaelp.teams",
 	"Category": "Teams Controls",
 	"CategoryIcon": "imgs/plugin/category-icon",
@@ -16,11 +16,7 @@
 	"OS": [
 		{
 			"Platform": "mac",
-			"MinimumVersion": "12"
-		},
-		{
-			"Platform": "windows",
-			"MinimumVersion": "10"
+			"MinimumVersion": "13"
 		}
 	],
 	"Nodejs": {
@@ -72,7 +68,7 @@
 			"Name": "Background blur",
 			"UUID": "ai.michaelp.teams.blur",
 			"Icon": "imgs/actions/blur/icon",
-			"Tooltip": "Toggle background blur. Lit while blurred.",
+			"Tooltip": "Background blur: not supported yet on current Teams.",
 			"Controllers": [
 				"Keypad"
 			],
@@ -87,7 +83,7 @@
 			"Name": "Raise hand",
 			"UUID": "ai.michaelp.teams.hand",
 			"Icon": "imgs/actions/hand/icon",
-			"Tooltip": "Raise or lower your hand. Lit while raised.",
+			"Tooltip": "Raise or lower your hand (through the React menu).",
 			"Controllers": [
 				"Keypad"
 			],

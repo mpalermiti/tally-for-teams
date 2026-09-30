@@ -1,9 +1,9 @@
 {
   "name": "streamdeck-teams",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Stream Deck plugin for Microsoft Teams meeting controls, via the Teams local third-party app API.",
   "scripts": {
-    "build": "rollup -c",
+    "build": "npm run build:bridge && rollup -c",
     "watch": "rollup -c -w --watch.onEnd=\"streamdeck restart ai.michaelp.teams\"",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
@@ -11,7 +11,8 @@
     "link": "streamdeck link ai.michaelp.teams.sdPlugin",
     "pack": "npm run build && streamdeck pack ai.michaelp.teams.sdPlugin --force",
     "smoke": "node scripts/smoke.mjs",
-    "sheet": "node --import tsx scripts/sheet.ts"
+    "sheet": "node --import tsx scripts/sheet.ts",
+    "build:bridge": "mkdir -p ai.michaelp.teams.sdPlugin/bin && swiftc -O bridge/TeamsBridge.swift -o ai.michaelp.teams.sdPlugin/bin/teams-bridge"
   },
   "license": "MIT",
   "dependencies": {

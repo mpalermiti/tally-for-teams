@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { Snapshot } from "../src/teams/client";
+import type { Snapshot } from "../src/teams/protocol";
 import { EMPTY_STATE, NO_PERMISSIONS, type MeetingPermissions, type MeetingState } from "../src/teams/protocol";
 import { KEY_KINDS, keySvg, muteDialFeedback, visualFor } from "../src/render/key";
 
@@ -99,7 +99,9 @@ describe("muteDialFeedback", () => {
 	});
 
 	it("explains why it's inactive", () => {
-		expect(text(muteDialFeedback(offline))).toEqual(["Teams", "Not connected"]);
+		expect(text(muteDialFeedback({ ...offline, reason: "no-permission" }))).toEqual(["Allow", "Accessibility"]);
+		expect(text(muteDialFeedback({ ...offline, reason: "teams-not-running" }))).toEqual(["Teams", "Not running"]);
+		expect(text(muteDialFeedback({ ...offline, reason: "starting" }))).toEqual(["Teams", "Connecting"]);
 		expect(text(muteDialFeedback(noMeeting))).toEqual(["Mic", "No meeting"]);
 		expect(text(muteDialFeedback(inMeeting({}, { canToggleMute: false })))).toEqual(["Mic", "Not available"]);
 	});
