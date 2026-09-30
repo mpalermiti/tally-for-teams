@@ -44,8 +44,9 @@ Put **Mute** on a dial and its strip shows a large **Live** or **Muted**, with w
 Requires a Mac, Stream Deck 7.1+, new Teams, Node.js, and Apple's command-line tools
 (`xcode-select --install`) to compile the Accessibility helper.
 
-1. **Install.** Without npm (e.g. behind a corporate npm mirror), use the prebuilt package:
-   `open dist/ai.michaelp.tally.streamDeckPlugin`. Or build it yourself:
+1. **Install.** Download
+   [`Tally.streamDeckPlugin`](https://github.com/mpalermiti/tally-for-teams/releases/latest/download/Tally.streamDeckPlugin)
+   from the latest release and double-click it. Or build it yourself:
    ```bash
    npm install
    npm run pack        # builds ai.michaelp.tally.streamDeckPlugin — double-click to install
@@ -93,9 +94,9 @@ npm run icons       # regenerate glyphs.ts and every PNG after design changes
 npm run sheet -- out.png   # render all keys in all states to one image
 ```
 
-CI (`.github/workflows/build.yml`) typechecks, tests, packs and smoke-tests on a Mac on every push
-to `main`, and keeps the package as a run artifact. That's how `dist/` is refreshed when npm is
-blocked locally: `gh run download --name ai.michaelp.tally.streamDeckPlugin --dir dist`.
+CI (`.github/workflows/build.yml`) builds, tests and packs on every push and keeps the package as
+a run artifact; pushing a tag `vX.Y.Z` (matching `package.json` and `manifest.json`, checked by
+`npm run version:check`) publishes a GitHub Release with `Tally.streamDeckPlugin` attached.
 
 Probe Teams directly (terminal needs Accessibility permission; run during a meeting):
 

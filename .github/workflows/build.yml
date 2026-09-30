@@ -1,14 +1,17 @@
 name: Build
 
-# Tests, builds and packs the plugin on a Mac, and keeps the package as a run artifact.
-# This is where dist/ comes from, since npm is blocked on some networks:
-#   gh run download --name ai.michaelp.tally.streamDeckPlugin --dir dist
+# Tests, builds and packs the plugin on a Mac on every push and pull request, keeping the
+# package as a run artifact. Pushing a tag like v1.0.0 also publishes it as a GitHub Release.
 on:
   push:
     branches: [main]
-    paths-ignore: ["dist/**", "docs/**", "**/*.md"]
+    tags: ["v*"]
+    paths-ignore: ["docs/**", "**/*.md"]
   pull_request:
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -20,14 +23,26 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      - name: Versions agree
+        run: npm run version:check -- "${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || '' }}"
       - run: npm run typecheck
       - run: npm test
       - name: Pack
         run: |
-          rm -f dist/*.streamDeckPlugin
           npm run pack
           mkdir -p dist
           mv ai.michaelp.tally.streamDeckPlugin dist/
+      - name: Validate manifest
+        run: npx streamdeck validate ai.michaelp.tally.sdPlugin
+      - name: Helper runs on both architectures
+        run: |
+          lipo ai.michaelp.tally.sdPlugin/bin/teams-bridge -verify_arch arm64
+          lipo ai.michaelp.tally.sdPlugin/bin/teams-bridge -verify_arch x86_64
+          if arch -x86_64 /usr/bin/true 2>/dev/null; then
+            echo | arch -x86_64 ai.michaelp.tally.sdPlugin/bin/teams-bridge && echo "✓ Intel helper starts and exits"
+          else
+            echo "Rosetta unavailable; Intel launch not tested"
+          fi
       - run: npm run smoke
       - run: npm run smoke:package
       - uses: actions/upload-artifact@v7
@@ -35,3 +50,13 @@ jobs:
           name: ai.michaelp.tally.streamDeckPlugin
           path: dist/ai.michaelp.tally.streamDeckPlugin
           if-no-files-found: error
+      - name: Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp dist/ai.michaelp.tally.streamDeckPlugin dist/Tally.streamDeckPlugin
+          flags=(--generate-notes --title "Tally for Teams ${GITHUB_REF_NAME#v}")
+          if [[ "$GITHUB_REF_NAME" == *-* ]]; then flags+=(--prerelease); fi
+          gh release create "$GITHUB_REF_NAME" dist/Tally.streamDeckPlugin "${flags[@]}"

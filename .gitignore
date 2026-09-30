@@ -1,9 +1,7 @@
 node_modules/
 build/
+dist/
 *.sdPlugin/bin
 *.sdPlugin/logs
 *.streamDeckPlugin
 .claude/
-
-# Prebuilt plugin for installing without npm (e.g. behind a corporate npm mirror)
-!dist/*.streamDeckPlugin
