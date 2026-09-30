@@ -12,7 +12,8 @@
     "pack": "npm run build && streamdeck pack ai.michaelp.teams.sdPlugin --force",
     "smoke": "node scripts/smoke.mjs",
     "sheet": "node --import tsx scripts/sheet.ts",
-    "build:bridge": "mkdir -p ai.michaelp.teams.sdPlugin/bin && swiftc -O bridge/TeamsBridge.swift -o ai.michaelp.teams.sdPlugin/bin/teams-bridge"
+    "build:bridge": "sh scripts/build-bridge.sh",
+    "smoke:package": "node scripts/smoke-package.mjs"
   },
   "license": "MIT",
   "dependencies": {

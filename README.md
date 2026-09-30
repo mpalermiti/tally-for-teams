@@ -43,7 +43,8 @@ Put **Mute** on a dial and its strip shows a large **Live** or **Muted**, with w
 Requires a Mac, Stream Deck 7.1+, new Teams, Node.js, and Apple's command-line tools
 (`xcode-select --install`) to compile the Accessibility helper.
 
-1. **Build and install:**
+1. **Install.** Without npm (e.g. behind a corporate npm mirror), use the prebuilt package:
+   `open dist/ai.michaelp.teams.streamDeckPlugin`. Or build it yourself:
    ```bash
    npm install
    npm run pack        # builds ai.michaelp.teams.streamDeckPlugin — double-click to install
@@ -78,6 +79,7 @@ npm test            # unit tests: selectors, bridge process handling, key/dial v
 npm run typecheck
 npm run build       # compiles bin/teams-bridge (Swift) and bundles bin/plugin.js
 npm run smoke       # end-to-end: the built plugin against a fake Stream Deck + scripted bridge
+npm run smoke:package  # the packed dist/ plugin, unzipped, starts its real helper
 npm run watch       # rebuild + restart the plugin in Stream Deck on save
 npm run icons       # regenerate glyphs.ts and every PNG after design changes
 npm run sheet -- out.png   # render all keys in all states to one image

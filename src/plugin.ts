@@ -1,4 +1,5 @@
 import streamDeck from "@elgato/streamdeck";
+import { chmodSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -10,6 +11,14 @@ streamDeck.logger.setLevel("info");
 // The Swift helper is built next to this bundle (bin/teams-bridge). TEAMS_BRIDGE overrides it
 // for the end-to-end smoke test, which substitutes a scripted fake.
 const bridgePath = process.env.TEAMS_BRIDGE ?? join(dirname(fileURLToPath(import.meta.url)), "teams-bridge");
+
+// `streamdeck pack` drops the executable bit, so an installed plugin can't launch its helper
+// until it's restored. The plugin folder belongs to the user, so this is allowed.
+try {
+	chmodSync(bridgePath, 0o755);
+} catch (error) {
+	streamDeck.logger.error(`Can't make teams-bridge executable: ${(error as Error).message}`);
+}
 
 const teams = new TeamsBridge({
 	command: bridgePath,
