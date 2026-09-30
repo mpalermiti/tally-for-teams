@@ -22,11 +22,12 @@ readable). Leave turns red during a meeting.
 | Leave | leave the meeting | (red during a meeting) | button verified |
 | Chat | open / close meeting chat | unread messages* | button verified |
 | Share | open the share tray; while presenting, stop sharing* | sharing* | button verified |
-| React | send the chosen reaction via the React menu* | — | menu labels unverified |
-| Raise hand | raise / lower via the React menu* | (not shown) | unverified |
-| Background blur | — | — | not supported yet |
+| React | send the chosen reaction (Like, Love, Applause, Laugh, Wow) via the React menu | — | menu item ids verified |
+| Raise hand | raise / lower via the React menu | (not shown†) | menu item id verified |
+| Background blur | — | — | not supported yet (the video-options menu exposed no items to the probe) |
 
-\* Based on expected labels; confirm with `swift probe/teams-ax-probe.swift --menus` (see below).
+\* Label while presenting / with unread messages not seen yet.
+† Teams only shows whether your hand is up inside the React menu, so the key can't light up for it.
 
 ### Stream Deck+ dial
 

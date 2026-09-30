@@ -149,8 +149,14 @@ try {
 	event("keyDown", "react", "REACT1", keyPayload({ reaction: "love" }));
 	await until(() => commands("menu").length === 1, "react key opens the React menu");
 	const menu = commands("menu")[0];
-	check(menu.id === "reaction-menu-button" && menu.labels.includes("heart"), "…looking for Heart");
-	reply(menu, false, "No heart/love in reaction-menu-button menu; it offered: nothing");
+	check(menu.id === "reaction-menu-button" && menu.itemIds.includes("heart-button"), "…looking for heart-button");
+	reply(menu, true, "pressed Love");
+	await sleep(200);
+	check(alerts("REACT1") === 0, "a sent reaction doesn't alert");
+
+	event("keyDown", "react", "REACT1", keyPayload({ reaction: "love" }));
+	await until(() => commands("menu").length === 2, "…second reaction");
+	reply(commands("menu")[1], false, "No heart-button in reaction-menu-button menu; it offered: nothing");
 	await until(() => alerts("REACT1") === 1, "a missing menu item flashes an alert");
 
 	// Blur isn't supported: alert, and the helper is never asked.

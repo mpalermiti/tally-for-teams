@@ -8,7 +8,8 @@
 // Protocol: one JSON object per line.
 //   stdin  {"cmd":"watch","ids":["microphone-button",…],"anchor":"microphone-button","bundleIds":["com.microsoft.teams2"]}
 //          {"cmd":"press","req":1,"id":"microphone-button"}
-//          {"cmd":"menu","req":2,"id":"reaction-menu-button","labels":["like"]}   open a menu, press the new item matching a label
+//          {"cmd":"menu","req":2,"id":"reaction-menu-button","itemIds":["like-button"],"labels":["like"]}
+//                                                                                 open a menu, press the new item (id first, then label)
 //          {"cmd":"prompt"}                                                       show macOS's Accessibility permission prompt
 //   stdout {"type":"status","trusted":true,"running":true,"buttons":{"microphone-button":{"label":"Mute mic","enabled":true}}}
 //          {"type":"result","req":1,"ok":true,"message":"pressed"}
@@ -172,9 +173,10 @@ func press(_ id: String, req: Any?) {
 	DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: poll)
 }
 
-/// Opens a menu (e.g. React) and presses the item that appeared whose label contains one of `labels`.
-/// Controls that existed before opening are ignored, so a chat message's "Like" can never match.
-func menu(_ id: String, labels: [String], req: Any?) {
+/// Opens a menu (e.g. React) and presses the item that appeared whose web id is in `itemIds`,
+/// falling back to one whose label contains a word from `labels`. Controls that existed before
+/// opening are ignored, so a chat message's "Like" can never match.
+func menu(_ id: String, itemIds: [String], labels: [String], req: Any?) {
 	guard AXIsProcessTrusted() else { return result(req, false, "Accessibility permission is off") }
 	guard let app = axApp else { return result(req, false, "Teams isn't running") }
 	guard let button = element(for: id) else { return result(req, false, "No \(id) on screen") }
@@ -183,26 +185,48 @@ func menu(_ id: String, labels: [String], req: Any?) {
 	let opened = AXUIElementPerformAction(button, kAXPressAction as CFString)
 	guard opened == .success else { return result(req, false, "Couldn't open \(id): AXError \(opened.rawValue)") }
 
-	let wanted = labels.map { $0.lowercased() }
+	let wantedLabels = labels.map { $0.lowercased() }
 	var fresh: [AXUIElement] = []
+	var item: AXUIElement?
 	let deadline = Date().addingTimeInterval(1.5)
-	while Date() < deadline {
+	while item == nil && Date() < deadline {
 		Thread.sleep(forTimeInterval: 0.1)
 		fresh = controls(in: app).filter { candidate in !before.contains { CFEqual($0, candidate) } }
-		if let item = fresh.first(where: { el in
-			guard let text = label(el)?.lowercased() else { return false }
-			return wanted.contains { text.contains($0) }
-		}) {
-			let error = AXUIElementPerformAction(item, kAXPressAction as CFString)
-			result(req, error == .success, error == .success ? "pressed \(label(item) ?? "item")" : "AXError \(error.rawValue)")
-			DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: poll)
-			return
-		}
+		item = fresh.first { domID($0).map(itemIds.contains) ?? false }
+			?? fresh.first { el in
+				guard let text = label(el)?.lowercased() else { return false }
+				return wantedLabels.contains { text.contains($0) }
+			}
 	}
-	// Not found: close the menu again and report what it offered, so selectors can be fixed.
-	AXUIElementPerformAction(button, kAXPressAction as CFString)
-	let offered = fresh.compactMap(label).prefix(25).joined(separator: " | ")
-	result(req, false, "No \(labels.joined(separator: "/")) in \(id) menu; it offered: \(offered.isEmpty ? "nothing" : offered)")
+
+	guard let item else {
+		let offered = fresh.map { "\(domID($0) ?? "?") \"\(label($0) ?? "")\"" }.prefix(25).joined(separator: " | ")
+		closeMenu(app, items: fresh, button: button)
+		return result(req, false, "No \(itemIds.first ?? labels.first ?? "item") in \(id) menu; it offered: \(offered.isEmpty ? "nothing" : offered)")
+	}
+	let error = AXUIElementPerformAction(item, kAXPressAction as CFString)
+	let pressedLabel = label(item) ?? domID(item) ?? "item"
+	Thread.sleep(forTimeInterval: 0.3)
+	closeMenu(app, items: fresh, button: button)
+	result(req, error == .success, error == .success ? "pressed \(pressedLabel)" : "AXError \(error.rawValue)")
+	DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: poll)
+}
+
+/// Closes a menu left open. On Teams 26267, pressing React again does NOT close its menu but
+/// Escape does, so Escape goes first; pressing the button again is the fallback.
+func closeMenu(_ app: AXUIElement, items: [AXUIElement], button: AXUIElement) {
+	func stillOpen() -> Bool {
+		let now = controls(in: app)
+		return items.contains { item in now.contains { CFEqual($0, item) } }
+	}
+	guard !items.isEmpty, stillOpen() else { return }
+	for down in [true, false] { CGEvent(keyboardEventSource: nil, virtualKey: 0x35, keyDown: down)?.postToPid(appPID) }
+	Thread.sleep(forTimeInterval: 0.3)
+	if stillOpen() {
+		AXUIElementPerformAction(button, kAXPressAction as CFString)
+		Thread.sleep(forTimeInterval: 0.3)
+		log(stillOpen() ? "menu stayed open after Escape and re-press" : "menu closed by re-press (Escape didn't)")
+	}
 }
 
 func handle(_ line: String) {
@@ -223,7 +247,12 @@ func handle(_ line: String) {
 	case "press":
 		press(message["id"] as? String ?? "", req: message["req"])
 	case "menu":
-		menu(message["id"] as? String ?? "", labels: message["labels"] as? [String] ?? [], req: message["req"])
+		menu(
+			message["id"] as? String ?? "",
+			itemIds: message["itemIds"] as? [String] ?? [],
+			labels: message["labels"] as? [String] ?? [],
+			req: message["req"]
+		)
 	case "prompt":
 		if !promptedThisSession {
 			promptedThisSession = true

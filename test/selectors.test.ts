@@ -77,13 +77,20 @@ describe("commandFor", () => {
 		expect(commandFor("toggle-ui", { type: "sharing-tray" })).toEqual({ cmd: "press", id: BUTTON_IDS.share });
 	});
 
-	it("sends reactions and raises hands through the React menu", () => {
-		expect(commandFor("send-reaction", { type: "love" })).toMatchObject({ cmd: "menu", id: BUTTON_IDS.react });
+	it("sends reactions and raises hands by pressing React-menu items by id", () => {
+		expect(commandFor("send-reaction", { type: "love" })).toMatchObject({
+			cmd: "menu",
+			id: BUTTON_IDS.react,
+			itemIds: ["heart-button"],
+		});
+		expect(commandFor("send-reaction", { type: "wow" })).toMatchObject({ itemIds: ["surprised-button"] });
+		expect(commandFor("send-reaction", {})).toMatchObject({ itemIds: ["like-button"] });
+		expect(commandFor("toggle-hand", {})).toMatchObject({ cmd: "menu", id: BUTTON_IDS.react, itemIds: ["raisehands-button"] });
+	});
+
+	it("keeps label fallbacks in case Teams renames the item ids", () => {
 		const love = commandFor("send-reaction", { type: "love" });
-		expect("labels" in love && love.labels).toContain("heart");
-		const hand = commandFor("toggle-hand", {});
-		expect(hand).toMatchObject({ cmd: "menu", id: BUTTON_IDS.react });
-		expect("labels" in hand && hand.labels).toEqual(expect.arrayContaining(["raise", "lower"]));
+		expect("labels" in love && love.labels).toContain("love");
 	});
 
 	it("reports what isn't supported instead of guessing", () => {

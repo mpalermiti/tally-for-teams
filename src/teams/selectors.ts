@@ -6,7 +6,8 @@
  * update renames something, this file is the fix.
  *
  * Confirmed on Teams 26267 for Mac (2026-09-29) with probe/teams-ax-probe.swift:
- * button ids, the mute and camera labels, and pressing with Teams in the background.
+ * toolbar and React-menu ids, the mute and camera labels, and pressing and reading
+ * with Teams in the background.
  * Marked UNVERIFIED below: guesses awaiting a probe run.
  */
 
@@ -35,18 +36,20 @@ export const BUTTON_IDS = {
 export const ANCHOR_ID = BUTTON_IDS.mute;
 
 /**
- * Words to look for in the React menu. Matched case-insensitively against items that
- * appear when the menu opens. UNVERIFIED: exact item labels.
+ * React-menu items, confirmed on Teams 26267 with `probe --menus`: ids like-button,
+ * heart-button, applause-button, laugh-button, surprised-button, raisehands-button
+ * (labels Like, Love, Applause, Laugh, Surprised, Raise). Ids are matched first; the
+ * labels are a fallback in case a Teams update renames the ids.
  */
-const REACTION_LABELS: Record<Reaction, string[]> = {
-	like: ["like"],
-	love: ["heart", "love"],
-	applause: ["applause", "clap"],
-	laugh: ["laugh"],
-	wow: ["surprised", "wow"],
+const REACTION_ITEMS: Record<Reaction, { id: string; labels: string[] }> = {
+	like: { id: "like-button", labels: ["like"] },
+	love: { id: "heart-button", labels: ["love", "heart"] },
+	applause: { id: "applause-button", labels: ["applause"] },
+	laugh: { id: "laugh-button", labels: ["laugh"] },
+	wow: { id: "surprised-button", labels: ["surprised", "wow"] },
 };
-/** UNVERIFIED: raise hand is believed to sit in the React menu as "Raise hand" / "Lower hand". */
-const HAND_LABELS = ["raise", "lower"];
+/** Raise hand is in the React menu. Its label is "Raise"; "Lower" while raised is expected but unverified. */
+const HAND_ITEM = { id: "raisehands-button", labels: ["raise", "lower"] };
 
 export interface BridgeButton {
 	label: string;
@@ -60,7 +63,9 @@ export interface BridgeStatus {
 	buttons: Record<string, BridgeButton>;
 }
 
-export type BridgeCommand = { cmd: "press"; id: string } | { cmd: "menu"; id: string; labels: string[] };
+export type BridgeCommand =
+	| { cmd: "press"; id: string }
+	| { cmd: "menu"; id: string; itemIds: string[]; labels: string[] };
 
 /** Turns the bridge's raw button labels into the meeting model keys render from. */
 export function snapshotFrom(status: BridgeStatus): Snapshot {
@@ -116,10 +121,12 @@ export function commandFor(action: TeamsAction, parameters: ActionParameters): B
 			return { cmd: "press", id: type === "chat" ? BUTTON_IDS.chat : BUTTON_IDS.share };
 		case "stop-sharing":
 			return { cmd: "press", id: BUTTON_IDS.share }; // UNVERIFIED: the share button stops sharing while presenting
-		case "send-reaction":
-			return { cmd: "menu", id: BUTTON_IDS.react, labels: REACTION_LABELS[(type as Reaction) ?? "like"] ?? ["like"] };
+		case "send-reaction": {
+			const item = REACTION_ITEMS[(type as Reaction) ?? "like"] ?? REACTION_ITEMS.like;
+			return { cmd: "menu", id: BUTTON_IDS.react, itemIds: [item.id], labels: item.labels };
+		}
 		case "toggle-hand":
-			return { cmd: "menu", id: BUTTON_IDS.react, labels: HAND_LABELS };
+			return { cmd: "menu", id: BUTTON_IDS.react, itemIds: [HAND_ITEM.id], labels: HAND_ITEM.labels };
 		case "toggle-background-blur":
 			return { unsupported: "Background blur isn't supported yet" };
 		case "query-state":
