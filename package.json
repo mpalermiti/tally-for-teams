@@ -1,6 +1,6 @@
 {
   "name": "tally-for-teams",
-  "version": "0.3.0",
+  "version": "1.0.0",
   "description": "Stream Deck plugin for Microsoft Teams meeting controls, via the Teams local third-party app API.",
   "scripts": {
     "build": "npm run build:bridge && rollup -c",
@@ -13,7 +13,8 @@
     "smoke": "node scripts/smoke.mjs",
     "sheet": "node --import tsx scripts/sheet.ts",
     "build:bridge": "sh scripts/build-bridge.sh",
-    "smoke:package": "node scripts/smoke-package.mjs"
+    "smoke:package": "node scripts/smoke-package.mjs",
+    "version:check": "node --import tsx scripts/check-version.ts"
   },
   "license": "MIT",
   "dependencies": {
