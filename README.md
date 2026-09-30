@@ -26,7 +26,7 @@ Tally reads meeting buttons: their labels and styling. It never reads messages, 
 
 ## Keys
 
-One rule: a lit key means it's live. Warm = your mic is hot, camera is on, your hand is up, you're sharing, or chat has unread messages. Dark = off. Dimmed = not in a meeting (dimmer still = Teams isn't readable). Leave turns red during a meeting.
+One rule: a lit key means it's live. Warm = your mic is hot, camera is on, your hand is up, you're sharing, or chat has unread messages. Dark = off. Dimmed = not in a meeting, or that control isn't available right now (dimmer still = Teams isn't readable). Leave turns red during a meeting.
 
 Status reflects Teams 26267.1701.5163.3395.
 
@@ -43,7 +43,7 @@ Status reflects Teams 26267.1701.5163.3395.
 \* Unverified: the unread-messages label, and that pressing Stop sharing stops it.
 † Teams says whether your hand is up only in a hover tooltip, but it restyles the React button while it is. The plugin compares React with the plain toolbar buttons (People, More, Chat), so it doesn't depend on Teams' generated class names.
 
-**Leave:** turn on *Hold to leave* in its settings so a tap can't hang up. Hold for about half a second; a ring fills, then you leave.
+**Leave:** turn on *Hold to leave* in its settings so a tap can't hang up. Hold for about half a second; a ring fills, then you leave. (In a Multi Action, Leave still acts at once.)
 
 ### Stream Deck+ dial
 
@@ -103,17 +103,9 @@ npm run icons           # regenerate glyphs.ts and every PNG after design change
 npm run sheet -- out.png   # render all keys in all states to one image
 ```
 
-CI (`.github/workflows/build.yml`) builds, tests, and packs on every push and keeps the package as a run artifact. Pushing a tag `vX.Y.Z` matching `package.json` and `manifest.json`, checked by `npm run version:check`, publishes a GitHub Release with `Tally.streamDeckPlugin` attached.
+CI (`.github/workflows/build.yml`) builds, tests, and packs on pushes to `main`, pull requests, and version tags; docs-only changes are skipped. Pushing a tag `vX.Y.Z` matching `package.json` and `manifest.json`, checked by `npm run version:check`, publishes a GitHub Release with `Tally.streamDeckPlugin` attached.
 
-### Releasing
-
-1. Bump `version` in `package.json` and `Version` in `ai.michaelp.tally.sdPlugin/manifest.json` (`X.Y.Z` / `X.Y.Z.0`).
-2. Run `npm run version:check`.
-3. Commit the version bump.
-4. Tag it: `git tag vX.Y.Z`.
-5. Push the tag: `git push --tags`.
-
-Pre-release tags like `v1.1.0-rc.1` publish pre-releases.
+### Probing Teams
 
 Probe Teams directly (terminal needs Accessibility permission; run during a meeting):
 
@@ -126,6 +118,8 @@ swift probe/teams-ax-diff.swift --only reaction-menu-button,share-button
                                               # print what changes as you raise a hand, share, …
 ```
 
+### Code map
+
 ```
 bridge/TeamsBridge.swift   Accessibility helper: watch ids, press, open-menu-and-press
 src/teams/selectors.ts     Teams knowledge: button ids, what labels mean, action → command
@@ -135,6 +129,16 @@ src/render/key.ts          meeting state → key visual (pure), and the SVG key 
 src/actions/               one class per key; shared behaviour in teams-key.ts, dial gestures in gestures.ts
 src/plugin.ts              wiring: start the helper, register keys, redraw on change
 ```
+
+### Releasing
+
+1. Bump `version` in `package.json` and `Version` in `ai.michaelp.tally.sdPlugin/manifest.json` (`X.Y.Z` / `X.Y.Z.0`).
+2. Run `npm run version:check`.
+3. Commit the version bump.
+4. Tag it: `git tag vX.Y.Z`.
+5. Push the tag: `git push --tags`.
+
+Pre-release tags like `v1.1.0-rc.1` publish pre-releases.
 
 ## Notes
 
