@@ -122,7 +122,6 @@ try {
 
 	event("willAppear", "mute", "MUTE1", keyPayload());
 	event("willAppear", "react", "REACT1", keyPayload({ reaction: "love" }));
-	event("willAppear", "blur", "BLUR1", keyPayload());
 	event("willAppear", "mute", "DIAL1", dialPayload);
 	await until(() => lastImage("MUTE1").includes("#3A3A42"), "keys draw offline before the bridge reports");
 	await until(() => feedback("DIAL1")?.label?.value === "Teams", "dial says Teams / Connecting");
@@ -142,7 +141,7 @@ try {
 	event("keyDown", "mute", "MUTE1", keyPayload());
 	await until(() => commands("press").some((c) => c.id === "microphone-button"), "pressing mute presses microphone-button");
 	pressMic(false);
-	await until(() => lastImage("MUTE1").includes("#8A8A94"), "mute key goes dark when the label flips to Unmute mic");
+	await until(() => lastImage("MUTE1").includes('fill="#18181B"') && !lastImage("MUTE1").includes("radialGradient"), "mute key goes dark when the label flips to Unmute mic");
 	check(alerts("MUTE1") === 1, "no alert on a successful press");
 
 	// Reactions go through the React menu.
@@ -158,12 +157,6 @@ try {
 	await until(() => commands("menu").length === 2, "…second reaction");
 	reply(commands("menu")[1], false, "No heart-button in reaction-menu-button menu; it offered: nothing");
 	await until(() => alerts("REACT1") === 1, "a missing menu item flashes an alert");
-
-	// Blur isn't supported: alert, and the helper is never asked.
-	const before = toBridge.length;
-	event("keyDown", "blur", "BLUR1", keyPayload());
-	await until(() => alerts("BLUR1") === 1, "blur key alerts (not supported yet)");
-	check(toBridge.length === before, "…without bothering the bridge");
 
 	// Stream Deck+ dial: hold to talk.
 	let presses = commands("press").length;

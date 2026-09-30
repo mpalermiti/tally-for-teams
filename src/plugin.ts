@@ -3,7 +3,7 @@ import { chmodSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { BlurKey, CameraKey, ChatKey, HandKey, LeaveKey, MuteKey, ReactKey, ShareKey } from "./actions/keys";
+import { CameraKey, ChatKey, HandKey, LeaveKey, MuteKey, ReactKey, ShareKey } from "./actions/keys";
 import { TeamsBridge } from "./teams/bridge";
 
 streamDeck.logger.setLevel("info");
@@ -28,7 +28,6 @@ const teams = new TeamsBridge({
 const keys = [
 	new MuteKey(teams),
 	new CameraKey(teams),
-	new BlurKey(teams),
 	new HandKey(teams),
 	new LeaveKey(teams),
 	new ReactKey(teams),

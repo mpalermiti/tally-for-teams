@@ -10,7 +10,7 @@ const rows: [string, any, object?][] = [
 	["offline", OFFLINE_SNAPSHOT],
 	["no meeting", { online: true, state: EMPTY_STATE, permissions: NO_PERMISSIONS }],
 	["muted / off", meet({ isMuted: true })],
-	["live / on", meet({ isVideoOn: true, isBackgroundBlurred: true, isHandRaised: true, hasUnreadMessages: true, isSharing: true, isRecordingOn: true })],
+	["live / on", meet({ isVideoOn: true, isHandRaised: true, hasUnreadMessages: true, isSharing: true, isRecordingOn: true })],
 ];
 const cell = 160, pad = 8, label = 150;
 let body = "";

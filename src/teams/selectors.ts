@@ -127,8 +127,6 @@ export function commandFor(action: TeamsAction, parameters: ActionParameters): B
 		}
 		case "toggle-hand":
 			return { cmd: "menu", id: BUTTON_IDS.react, itemIds: [HAND_ITEM.id], labels: HAND_ITEM.labels };
-		case "toggle-background-blur":
-			return { unsupported: "Background blur isn't supported yet" };
 		case "query-state":
 			return { unsupported: "Not needed: the bridge reports state continuously" };
 	}

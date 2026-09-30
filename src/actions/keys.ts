@@ -58,12 +58,6 @@ export class CameraKey extends TeamsKey {
 	protected press = () => this.teams.request("toggle-video");
 }
 
-@action({ UUID: "ai.michaelp.teams.blur" })
-export class BlurKey extends TeamsKey {
-	readonly kind = "blur";
-	protected press = () => this.teams.request("toggle-background-blur");
-}
-
 @action({ UUID: "ai.michaelp.teams.hand" })
 export class HandKey extends TeamsKey {
 	readonly kind = "hand";

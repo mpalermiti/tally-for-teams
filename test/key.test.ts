@@ -30,11 +30,9 @@ describe("visualFor", () => {
 		expect(visualFor("mute", inMeeting({ isMuted: true }))).toMatchObject({ tone: "off", glyph: "mic-off" });
 	});
 
-	it("lights camera, blur and hand when they're on", () => {
+	it("lights camera and hand when they're on", () => {
 		expect(visualFor("camera", inMeeting({ isVideoOn: true }))).toMatchObject({ tone: "on", glyph: "video" });
 		expect(visualFor("camera", inMeeting({ isVideoOn: false }))).toMatchObject({ tone: "off", glyph: "video-off" });
-		expect(visualFor("blur", inMeeting({ isBackgroundBlurred: true })).tone).toBe("on");
-		expect(visualFor("blur", inMeeting({ isBackgroundBlurred: false })).tone).toBe("off");
 		expect(visualFor("hand", inMeeting({ isHandRaised: true })).tone).toBe("on");
 		expect(visualFor("hand", inMeeting({ isHandRaised: false })).tone).toBe("off");
 	});

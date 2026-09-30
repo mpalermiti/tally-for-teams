@@ -24,7 +24,6 @@ readable). Leave turns red during a meeting.
 | Share | open the share tray; while presenting, stop sharing* | sharing* | button verified |
 | React | send the chosen reaction (Like, Love, Applause, Laugh, Wow) via the React menu | — | menu item ids verified |
 | Raise hand | raise / lower via the React menu | (not shown†) | menu item id verified |
-| Background blur | — | — | not supported yet (the video-options menu exposed no items to the probe) |
 
 \* Label while presenting / with unread messages not seen yet.
 † Teams only shows whether your hand is up inside the React menu, so the key can't light up for it.
@@ -111,4 +110,4 @@ src/plugin.ts              wiring: start the helper, register keys, redraw on ch
   menu, so a chat message's "Like" can never be pressed.
 - **Limits:** it can only use what Teams shows on screen, so it can't join meetings, set presence
   or read your calendar. A Teams interface update can break a button until `selectors.ts` is updated.
-- Glyphs from [Lucide](https://lucide.dev) (ISC); `wow` and `blur` are custom on the same grid.
+- Glyphs from [Lucide](https://lucide.dev) (ISC); `wow` is custom on the same grid.

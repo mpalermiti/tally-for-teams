@@ -65,21 +65,6 @@
 			]
 		},
 		{
-			"Name": "Background blur",
-			"UUID": "ai.michaelp.teams.blur",
-			"Icon": "imgs/actions/blur/icon",
-			"Tooltip": "Background blur: not supported yet on current Teams.",
-			"Controllers": [
-				"Keypad"
-			],
-			"States": [
-				{
-					"Image": "imgs/actions/blur/key",
-					"ShowTitle": false
-				}
-			]
-		},
-		{
 			"Name": "Raise hand",
 			"UUID": "ai.michaelp.teams.hand",
 			"Icon": "imgs/actions/hand/icon",

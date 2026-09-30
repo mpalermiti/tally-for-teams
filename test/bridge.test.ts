@@ -124,7 +124,7 @@ describe("TeamsBridge", () => {
 		start();
 		latest().status({ [BUTTON_IDS.mute]: "Mute mic" });
 		await until(() => bridge.snapshot.online);
-		await expect(bridge.request("toggle-background-blur")).resolves.toMatchObject({ ok: false });
+		await expect(bridge.request("query-state")).resolves.toMatchObject({ ok: false });
 		expect(latest().written.filter((m) => m.cmd !== "watch")).toEqual([]);
 	});
 

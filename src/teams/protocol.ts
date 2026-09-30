@@ -8,7 +8,6 @@
 export type TeamsAction =
 	| "toggle-mute"
 	| "toggle-video"
-	| "toggle-background-blur"
 	| "toggle-hand"
 	| "leave-call"
 	| "send-reaction"
@@ -47,7 +46,6 @@ export interface MeetingState {
 	isHandRaised: boolean;
 	isInMeeting: boolean;
 	isRecordingOn: boolean;
-	isBackgroundBlurred: boolean;
 	isSharing: boolean;
 	hasUnreadMessages: boolean;
 }
@@ -56,7 +54,6 @@ export interface MeetingPermissions {
 	canToggleMute: boolean;
 	canToggleVideo: boolean;
 	canToggleHand: boolean;
-	canToggleBlur: boolean;
 	canLeave: boolean;
 	canReact: boolean;
 	canToggleShareTray: boolean;
@@ -71,7 +68,6 @@ export const EMPTY_STATE: MeetingState = {
 	isHandRaised: false,
 	isInMeeting: false,
 	isRecordingOn: false,
-	isBackgroundBlurred: false,
 	isSharing: false,
 	hasUnreadMessages: false,
 };
@@ -80,7 +76,6 @@ export const NO_PERMISSIONS: MeetingPermissions = {
 	canToggleMute: false,
 	canToggleVideo: false,
 	canToggleHand: false,
-	canToggleBlur: false,
 	canLeave: false,
 	canReact: false,
 	canToggleShareTray: false,

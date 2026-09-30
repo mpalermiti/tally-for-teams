@@ -42,7 +42,6 @@ describe("snapshotFrom", () => {
 			canToggleHand: true, // raise hand lives in the React menu
 			canToggleChat: true,
 			canToggleShareTray: true,
-			canToggleBlur: false, // not supported yet
 		});
 
 		const narrow = snapshotFrom(status({ "microphone-button": "Mute mic", "hangup-button": "Leave" }));
@@ -94,6 +93,6 @@ describe("commandFor", () => {
 	});
 
 	it("reports what isn't supported instead of guessing", () => {
-		expect(commandFor("toggle-background-blur", {})).toEqual({ unsupported: "Background blur isn't supported yet" });
+		expect(commandFor("query-state", {})).toMatchObject({ unsupported: expect.any(String) });
 	});
 });
