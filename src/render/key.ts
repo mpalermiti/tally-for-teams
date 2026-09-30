@@ -7,10 +7,13 @@ import { GLYPHS, type GlyphName } from "./glyphs";
  *
  *   offline  Teams unreachable (closed, or its API is off)      — glyph barely visible
  *   idle     connected, but not in a meeting / not allowed now  — glyph dim
- *   off      in a meeting, feature off (muted, camera off, …)   — glyph grey
+ *   off      in a meeting, feature off (muted, camera off, …)   — glyph white
  *   ready    in a meeting, one-shot action available            — glyph white
  *   on       in a meeting, feature live (mic hot, camera on, …) — warm lit key
  *   danger   leave, while in a meeting                          — red key
+ *
+ * Every key you can press is drawn equally bright. Only the fill says what's live, and the
+ * glyph (mic-off, video-off) says what's off. Brightness drops only when the key won't work.
  */
 export type Tone = "offline" | "idle" | "off" | "ready" | "on" | "danger";
 
@@ -72,7 +75,7 @@ export function visualFor(kind: KeyKind, snapshot: Snapshot, options: { reaction
 const INK = {
 	offline: { bg: "#0E0E10", glyph: "#3A3A42" },
 	idle: { bg: "#111113", glyph: "#5C5C66" },
-	off: { bg: "#18181B", glyph: "#8A8A94" },
+	off: { bg: "#18181B", glyph: "#EDEDF0" },
 	ready: { bg: "#18181B", glyph: "#EDEDF0" },
 	on: { bg: "#F7B93E", glyph: "#1E1507" },
 	danger: { bg: "#D83A31", glyph: "#FFFFFF" },

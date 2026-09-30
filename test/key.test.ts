@@ -78,6 +78,21 @@ describe("visualFor", () => {
 });
 
 describe("keySvg", () => {
+	const stroke = (svg: string) => svg.match(/stroke="(#[0-9A-F]{6})"/i)?.[1];
+
+	it("draws every pressable dark key with the same bright glyph; only the lit fill says what's on", () => {
+		const ready = stroke(keySvg(visualFor("react", inMeeting())));
+		expect(stroke(keySvg(visualFor("hand", inMeeting())))).toBe(ready);
+		expect(stroke(keySvg(visualFor("camera", inMeeting({ isVideoOn: false }))))).toBe(ready);
+		expect(stroke(keySvg(visualFor("mute", inMeeting({ isMuted: true }))))).toBe(ready);
+	});
+
+	it("still dims keys you can't press", () => {
+		const ready = stroke(keySvg(visualFor("react", inMeeting())));
+		expect(stroke(keySvg(visualFor("hand", noMeeting)))).not.toBe(ready);
+		expect(stroke(keySvg(visualFor("hand", offline)))).not.toBe(ready);
+	});
+
 	it("renders a 144px square SVG with the glyph and, when recording, a badge", () => {
 		const svg = keySvg(visualFor("mute", inMeeting({ isRecordingOn: true })));
 		expect(svg).toMatch(/^<svg[^>]+viewBox="0 0 144 144"/);
