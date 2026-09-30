@@ -97,6 +97,13 @@ describe("keySvg", () => {
 		expect(svg).toContain('data-badge="recording"');
 		expect(keySvg(visualFor("mute", inMeeting()))).not.toContain("data-badge");
 	});
+
+	it("draws hold progress as a ring and a hint as a word under the glyph", () => {
+		const leave = visualFor("leave", inMeeting());
+		expect(keySvg(leave)).not.toContain("data-progress");
+		expect(keySvg(leave, { progress: 0.5 })).toContain('data-progress="0.50"');
+		expect(keySvg(leave, { hint: "Hold" })).toContain(">Hold</text>");
+	});
 });
 
 describe("muteDialFeedback", () => {

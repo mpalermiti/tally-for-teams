@@ -112,6 +112,34 @@ function recordingBadge(visual: Visual, cx: number, cy: number): string {
 	return `<circle data-badge="recording" cx="${cx}" cy="${cy}" r="9" fill="#FF3B30" stroke="${INK[visual.tone].bg}" stroke-width="3"/>`;
 }
 
+/** Temporary marks over a key: how far through a hold, or a one-word hint. */
+export interface KeyOverlay {
+	/** 0–1, drawn as a ring around the glyph. */
+	progress?: number;
+	/** A word under the glyph, e.g. "Hold". */
+	hint?: string;
+}
+
+function progressRing(progress: number, color: string): string {
+	const r = 62;
+	const circumference = 2 * Math.PI * r;
+	const centre = SIZE / 2;
+	return (
+		`<circle data-progress="${progress.toFixed(2)}" cx="${centre}" cy="${centre}" r="${r}" fill="none" stroke="${color}" ` +
+		`stroke-width="6" stroke-linecap="round" stroke-dasharray="${(progress * circumference).toFixed(1)} ${circumference.toFixed(1)}" ` +
+		`transform="rotate(-90 ${centre} ${centre})"/>`
+	);
+}
+
+const escapeXml = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+function hintText(hint: string, color: string): string {
+	return (
+		`<text x="${SIZE / 2}" y="132" text-anchor="middle" font-family="-apple-system, Helvetica, sans-serif" ` +
+		`font-size="20" font-weight="600" fill="${color}">${escapeXml(hint)}</text>`
+	);
+}
+
 function svg(width: number, height: number, body: string): string {
 	return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">${body}</svg>`;
 }
@@ -119,19 +147,22 @@ function svg(width: number, height: number, body: string): string {
 const dataUrl = (markup: string) => `data:image/svg+xml;base64,${Buffer.from(markup).toString("base64")}`;
 
 /** A 144×144 key face. Stream Deck scales it for smaller keys. */
-export function keySvg(visual: Visual): string {
+export function keySvg(visual: Visual, overlay: KeyOverlay = {}): string {
 	const offset = (SIZE - GLYPH_SIZE) / 2;
+	const ink = INK[visual.tone].glyph;
 	return svg(
 		SIZE,
 		SIZE,
 		background(visual.tone, SIZE, SIZE) +
-			glyphGroup(visual.glyph, INK[visual.tone].glyph, offset, offset, GLYPH_SIZE) +
-			recordingBadge(visual, 120, 24),
+			glyphGroup(visual.glyph, ink, offset, offset, GLYPH_SIZE) +
+			recordingBadge(visual, 120, 24) +
+			(overlay.progress === undefined ? "" : progressRing(overlay.progress, ink)) +
+			(overlay.hint ? hintText(overlay.hint, ink) : ""),
 	);
 }
 
-export function keyDataUrl(visual: Visual): string {
-	return dataUrl(keySvg(visual));
+export function keyDataUrl(visual: Visual, overlay?: KeyOverlay): string {
+	return dataUrl(keySvg(visual, overlay));
 }
 
 // ── Stream Deck+ touch strip (mute dial) ───────────────────────────────────
