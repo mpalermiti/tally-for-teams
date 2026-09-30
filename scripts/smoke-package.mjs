@@ -5,7 +5,9 @@
  * such as `streamdeck pack` dropping the helper's executable bit.
  *
  * On a Mac without Accessibility permission for this process, the expected result is
- * the dial saying "Allow / Accessibility", which proves the helper ran and answered.
+ * the dial saying "Allow / Accessibility", which proves the helper ran and answered. With
+ * permission it says "Teams / Not running" or "Mic / No meeting"; any answer but
+ * "Teams / Connecting" passes.
  *
  * Usage: npm run smoke:package
  */
@@ -54,8 +56,10 @@ socket?.send(JSON.stringify({
 }));
 
 const answered = () => {
-	const label = fromPlugin.filter((m) => m.event === "setFeedback").at(-1)?.payload?.label?.value;
-	return label && label !== "Teams" ? label : undefined; // "Teams / Connecting" means no answer yet
+	const payload = fromPlugin.filter((m) => m.event === "setFeedback").at(-1)?.payload;
+	const words = payload && [payload.label?.value, payload.detail?.value].filter(Boolean).join(" / ");
+	// "Teams / Connecting" means no answer yet; "Teams / Not running" is an answer.
+	return words && payload.detail?.value !== "Connecting" ? words : undefined;
 };
 while (!answered() && Date.now() < deadline) await new Promise((r) => setTimeout(r, 50));
 plugin.kill();
