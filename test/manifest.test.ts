@@ -1,4 +1,5 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import { KEY_KINDS } from "../src/render/key";
@@ -27,8 +28,15 @@ describe("manifest", () => {
 
 	it("keeps every settings page working offline", () => {
 		for (const { PropertyInspectorPath: page } of manifest.Actions.filter((a: { PropertyInspectorPath?: string }) => a.PropertyInspectorPath)) {
-			const html = readFileSync(new URL(`../ai.michaelp.tally.sdPlugin/${page}`, import.meta.url), "utf8");
-			expect(html, page).not.toMatch(/src="https?:/);
+			const pageUrl = new URL(`../ai.michaelp.tally.sdPlugin/${page}`, import.meta.url);
+			const html = readFileSync(pageUrl, "utf8");
+			const assetReferences = [...html.matchAll(/\b(?:src|href)\s*=\s*["']([^"']+)["']/g)].map((match) => match[1]);
+
+			for (const value of assetReferences) {
+				expect(value, `${page} references an absolute URL`).not.toMatch(/^[a-z][a-z0-9+.-]*:/i);
+				expect(value.startsWith("//"), `${page} references a protocol-relative URL ${value}`).toBe(false);
+				expect(existsSync(fileURLToPath(new URL(value, pageUrl))), `${page} references missing local asset ${value}`).toBe(true);
+			}
 		}
 	});
 });

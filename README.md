@@ -126,5 +126,5 @@ src/plugin.ts              wiring: start the helper, register keys, redraw on ch
   the plugin opened the menu, so a chat message's "Like" can never be pressed.
 - **Limits:** it can only use what Teams shows on screen, so it can't join meetings, set presence
   or read your calendar. A Teams interface update can break a button until `selectors.ts` is updated.
-- Settings pages use [sdpi-components](https://sdpi-components.dev) (MIT), shipped with the plugin.
+- Settings pages use [sdpi-components](https://sdpi-components.dev) (MIT), which bundles [Lit](https://lit.dev) (BSD-3-Clause); both are shipped with the plugin, with their licenses in `ai.michaelp.tally.sdPlugin/ui/sdpi-components.LICENSE.txt`.
 - Glyphs from [Lucide](https://lucide.dev) (ISC); `wow` is custom on the same grid.
