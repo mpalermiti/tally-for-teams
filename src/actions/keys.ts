@@ -10,8 +10,8 @@ import {
 	type WillDisappearEvent,
 } from "@elgato/streamdeck";
 
-import { muteDialFeedback, visualFor } from "../render/key";
-import { HOLD_TO_LEAVE_MS, HoldToConfirm, HoldToggle, RotateToggle } from "./gestures";
+import { muteDialFeedback } from "../render/key";
+import { HOLD_TO_LEAVE_MS, HoldToConfirm, HoldToggle, RotateToggle, shouldHoldToLeave } from "./gestures";
 import { TeamsKey, type KeySettings } from "./teams-key";
 
 // One class per key: Stream Deck identifies actions by UUID, and each UUID needs its own decorated class.
@@ -68,7 +68,7 @@ export class HandKey extends TeamsKey {
 	protected press = () => this.teams.request("toggle-hand");
 }
 
-/** Leaves the meeting; the optional hold only applies while you're in a meeting. */
+/** Leaves the meeting. With Hold to leave on, only a held press does, except while Teams is offline or in a multi-action. */
 @action({ UUID: "ai.michaelp.tally.leave" })
 export class LeaveKey extends TeamsKey {
 	readonly kind = "leave";
@@ -80,8 +80,13 @@ export class LeaveKey extends TeamsKey {
 	#nextHintSerial = 0;
 
 	override onKeyDown(ev: KeyDownEvent<KeySettings>): Promise<void> {
-		// A multi-action sends down and up together, so it can't be held.
-		if (!ev.payload.settings.holdToLeave || ev.payload.isInMultiAction || visualFor(this.kind, this.teams.snapshot).tone !== "danger") {
+		if (
+			!shouldHoldToLeave({
+				holdToLeave: ev.payload.settings.holdToLeave,
+				isInMultiAction: ev.payload.isInMultiAction,
+				teamsOnline: this.teams.snapshot.online,
+			})
+		) {
 			return super.onKeyDown(ev);
 		}
 		this.#stop(ev.action.id);

@@ -1,6 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { HoldToConfirm, HoldToggle, RotateToggle } from "../src/actions/gestures";
+import { HoldToConfirm, HoldToggle, RotateToggle, shouldHoldToLeave } from "../src/actions/gestures";
+
+afterEach(() => vi.restoreAllMocks());
 
 /** A controllable clock. */
 function clock(start = 1_000) {
@@ -44,6 +46,14 @@ describe("HoldToggle", () => {
 	it("ignores a release with no matching press", () => {
 		expect(new HoldToggle().up(true)).toBe(false);
 	});
+
+	it("uses a monotonic default clock, so a backwards wall-clock step still releases a hold", () => {
+		vi.spyOn(Date, "now").mockReturnValueOnce(1_000).mockReturnValueOnce(500);
+		vi.spyOn(performance, "now").mockReturnValueOnce(0).mockReturnValueOnce(500);
+		const hold = new HoldToggle(400);
+		hold.down(true);
+		expect(hold.up(false)).toBe(true);
+	});
 });
 
 describe("RotateToggle", () => {
@@ -69,6 +79,26 @@ describe("RotateToggle", () => {
 		expect(rotate.shouldToggle(1, true)).toBe(false); // state not updated yet; don't double-toggle
 		c.advance(500);
 		expect(rotate.shouldToggle(1, true)).toBe(true);
+	});
+
+	it("uses a monotonic default clock, so a backwards wall-clock step doesn't stretch the cooldown", () => {
+		vi.spyOn(Date, "now").mockReturnValueOnce(1_000).mockReturnValueOnce(1_000).mockReturnValueOnce(900);
+		vi.spyOn(performance, "now").mockReturnValueOnce(0).mockReturnValueOnce(0).mockReturnValueOnce(600);
+		const rotate = new RotateToggle(500);
+		expect(rotate.shouldToggle(1, true)).toBe(true);
+		expect(rotate.shouldToggle(-1, false)).toBe(true);
+	});
+});
+
+describe("shouldHoldToLeave", () => {
+	it("holds whenever the option is on and Teams is readable, even if the leave key is only idle", () => {
+		expect(shouldHoldToLeave({ holdToLeave: true, isInMultiAction: false, teamsOnline: true })).toBe(true);
+	});
+
+	it("skips the hold only when disabled, in a multi-action, or Teams is offline", () => {
+		expect(shouldHoldToLeave({ holdToLeave: false, isInMultiAction: false, teamsOnline: true })).toBe(false);
+		expect(shouldHoldToLeave({ holdToLeave: true, isInMultiAction: true, teamsOnline: true })).toBe(false);
+		expect(shouldHoldToLeave({ holdToLeave: true, isInMultiAction: false, teamsOnline: false })).toBe(false);
 	});
 });
 

@@ -13,7 +13,7 @@ export class HoldToggle {
 
 	constructor(
 		private readonly thresholdMs = 400,
-		private readonly now: () => number = Date.now,
+		private readonly now: () => number = () => performance.now(),
 	) {}
 
 	/** Always toggles; remembers the state it started from. */
@@ -42,7 +42,7 @@ export class RotateToggle {
 
 	constructor(
 		private readonly cooldownMs = 500,
-		private readonly now: () => number = Date.now,
+		private readonly now: () => number = () => performance.now(),
 	) {}
 
 	shouldToggle(ticks: number, muted: boolean): boolean {
@@ -56,6 +56,18 @@ export class RotateToggle {
 
 /** How long "Hold to leave" needs the Leave key held. */
 export const HOLD_TO_LEAVE_MS = 600;
+
+export function shouldHoldToLeave({
+	holdToLeave,
+	isInMultiAction,
+	teamsOnline,
+}: {
+	holdToLeave?: boolean;
+	isInMultiAction?: boolean;
+	teamsOnline: boolean;
+}): boolean {
+	return Boolean(holdToLeave && !isInMultiAction && teamsOnline);
+}
 
 /**
  * A press that only counts once held for `holdMs`, so a tap can't do something drastic.
