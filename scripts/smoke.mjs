@@ -158,6 +158,40 @@ try {
 	reply(commands("menu")[1], false, "No heart-button in reaction-menu-button menu; it offered: nothing");
 	await until(() => alerts("REACT1") === 1, "a missing menu item flashes an alert");
 
+	// Leave: a tap leaves by default.
+	const leaves = () => commands("press").filter((c) => c.id === "hangup-button").length;
+	event("willAppear", "leave", "LEAVE1", keyPayload());
+	event("keyDown", "leave", "LEAVE1", keyPayload());
+	await until(() => leaves() === 1, "Leave leaves on a tap by default");
+	reply(commands("press").at(-1));
+	event("keyUp", "leave", "LEAVE1", keyPayload());
+
+	// With Hold to leave on, a tap only shows "Hold"…
+	const holdToLeave = keyPayload({ holdToLeave: true });
+	event("willAppear", "leave", "LEAVE2", holdToLeave);
+	event("keyDown", "leave", "LEAVE2", holdToLeave);
+	await until(() => lastImage("LEAVE2").includes("data-progress"), "holding Leave draws a progress ring");
+	await sleep(200);
+	event("keyUp", "leave", "LEAVE2", holdToLeave);
+	await until(() => lastImage("LEAVE2").includes(">Hold<"), "releasing early says Hold");
+	check(leaves() === 1, "…and doesn't leave");
+
+	// …pressing again while "Hold" shows starts a fresh hold, and a full hold leaves without waiting for release.
+	event("keyDown", "leave", "LEAVE2", holdToLeave);
+	await until(() => lastImage("LEAVE2").includes("data-progress"), "a new press during the hint starts a fresh ring");
+	await until(() => leaves() === 2, "holding Leave for 0.6 s leaves", 2000);
+	reply(commands("press").at(-1));
+	event("keyUp", "leave", "LEAVE2", holdToLeave);
+	await sleep(300);
+	check(leaves() === 2, "…exactly once, even after the key comes up");
+
+	// A multi-action can't hold, so Leave acts at once there.
+	const multiActionLeave = { ...holdToLeave, isInMultiAction: true };
+	event("keyDown", "leave", "LEAVE2", multiActionLeave);
+	await until(() => leaves() === 3, "in a multi-action, Leave acts immediately");
+	reply(commands("press").at(-1));
+	event("keyUp", "leave", "LEAVE2", multiActionLeave);
+
 	// Stream Deck+ dial: hold to talk.
 	let presses = commands("press").length;
 	event("dialDown", "mute", "DIAL1", dialPayload);
@@ -182,6 +216,14 @@ try {
 	buttons = {};
 	status();
 	await until(() => feedback("DIAL1")?.detail?.value === "No meeting", "dial says No meeting once the toolbar is gone");
+
+	// With Hold to leave on, a tap never leaves while Teams is readable, even with the key dimmed.
+	const before = leaves();
+	event("keyDown", "leave", "LEAVE2", holdToLeave);
+	await sleep(150);
+	event("keyUp", "leave", "LEAVE2", holdToLeave);
+	await sleep(300);
+	check(leaves() === before, "a tap on a dimmed Leave key doesn't leave when Hold to leave is on");
 
 	// Teams quits.
 	status({ running: false });
