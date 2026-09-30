@@ -132,19 +132,19 @@ src/plugin.ts              wiring: start the helper, register keys, redraw on ch
 
 ### Releasing
 
-1. Bump `version` in `package.json` and `Version` in `ai.michaelp.tally.sdPlugin/manifest.json` (`X.Y.Z` / `X.Y.Z.0`).
-2. Run `npm run version:check`.
-3. Commit the version bump.
-4. Tag it: `git tag vX.Y.Z`.
-5. Push the tag: `git push --tags`.
+1. `npm version X.Y.Z --no-git-tag-version` (updates `package.json` and `package-lock.json`), and set `Version` to `X.Y.Z.0` in `ai.michaelp.tally.sdPlugin/manifest.json`.
+2. `npm run version:check`.
+3. Commit the bump.
+4. `git tag vX.Y.Z`.
+5. `git push && git push origin vX.Y.Z`.
 
-Pre-release tags like `v1.1.0-rc.1` publish pre-releases.
+Pre-release tags like `v1.1.0-rc.1` publish pre-releases; for those, the npm version is `X.Y.Z-rc.N` and the manifest stays `X.Y.Z.0`.
 
 ## Notes
 
 - **Privacy:** the helper only reads buttons, toggles, and menu items (their labels and styling), never messages, chat rows, people's names, or window titles. Menu items are matched only if they appeared after the plugin opened the menu, so a chat message's "Like" can never be pressed.
 - **Limits:** it can only use what Teams shows on screen, so it can't join meetings, set presence, or read your calendar. A Teams interface update can break a button until `selectors.ts` is updated.
-- **Glyphs:** from [Lucide](https://lucide.dev) (ISC); `wow` is custom on the same grid.
+- **Glyphs:** from [Lucide](https://lucide.dev) (ISC; parts MIT); `wow` is custom on the same grid. License in [`ai.michaelp.tally.sdPlugin/lucide.LICENSE.txt`](ai.michaelp.tally.sdPlugin/lucide.LICENSE.txt).
 - **Settings pages:** use [sdpi-components](https://sdpi-components.dev) (MIT), which bundles [Lit](https://lit.dev) (BSD-3-Clause); both are shipped with the plugin, with their licenses in [`ai.michaelp.tally.sdPlugin/ui/sdpi-components.LICENSE.txt`](ai.michaelp.tally.sdPlugin/ui/sdpi-components.LICENSE.txt).
 - Not affiliated with or endorsed by Microsoft or Elgato. Microsoft Teams is a trademark of Microsoft Corporation.
 
