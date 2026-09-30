@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { HoldToggle, RotateToggle } from "../src/actions/gestures";
+import { HoldToConfirm, HoldToggle, RotateToggle } from "../src/actions/gestures";
 
 /** A controllable clock. */
 function clock(start = 1_000) {
@@ -69,5 +69,43 @@ describe("RotateToggle", () => {
 		expect(rotate.shouldToggle(1, true)).toBe(false); // state not updated yet; don't double-toggle
 		c.advance(500);
 		expect(rotate.shouldToggle(1, true)).toBe(true);
+	});
+});
+
+describe("HoldToConfirm", () => {
+	it("reports progress while held and fires once when the hold completes", () => {
+		const c = clock();
+		const hold = new HoldToConfirm(600, c.now);
+		expect(hold.progress).toBeUndefined();
+		hold.start();
+		c.advance(300);
+		expect(hold.progress).toBeCloseTo(0.5);
+		expect(hold.fire()).toBe(false);
+		c.advance(300);
+		expect(hold.progress).toBe(1);
+		expect(hold.fire()).toBe(true);
+		expect(hold.fire()).toBe(false); // once per hold
+	});
+
+	it("calls an early release a tap, which shouldn't count", () => {
+		const c = clock();
+		const hold = new HoldToConfirm(600, c.now);
+		hold.start();
+		c.advance(200);
+		expect(hold.release()).toBe(true);
+		expect(hold.progress).toBeUndefined();
+	});
+
+	it("doesn't call it a tap once the hold has fired", () => {
+		const c = clock();
+		const hold = new HoldToConfirm(600, c.now);
+		hold.start();
+		c.advance(700);
+		hold.fire();
+		expect(hold.release()).toBe(false);
+	});
+
+	it("ignores a release without a press", () => {
+		expect(new HoldToConfirm(600, clock().now).release()).toBe(false);
 	});
 });
