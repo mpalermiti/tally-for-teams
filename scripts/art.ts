@@ -260,7 +260,9 @@ export function demoSvg(): string {
 	};
 	const keyClass = (index: number) => (index === 0 ? "a dip mute-dip" : index === 3 ? "a dip share-dip" : "");
 
-	const frames = beats.map((state, i) => `<g class="a t${i}" opacity="${i === 3 ? 1 : 0}">${toolbar(state)}</g>`).join("");
+	const frames = beats
+		.map((state, i) => `<g class="${i === 0 ? "t0" : `a t${i}`}" opacity="1">${toolbar(state)}</g>`)
+		.join("");
 	const pointer =
 		`<g class="a pointer" opacity="0"><path d="M0 0 L0 30 L8 23 L13 34 L18 32 L13 21 L23 21 Z" fill="${INK}" stroke="#FFFFFF" stroke-width="2" stroke-linejoin="round"/></g>`;
 
@@ -273,7 +275,7 @@ export function demoSvg(): string {
 		`.dip{transform-box:fill-box;transform-origin:center}` +
 		`.mute-on{animation-name:muteOn}.hand-on{animation-name:handOn}.share-on{animation-name:shareOn}` +
 		`.mute-dip{animation-name:muteDip}.share-dip{animation-name:shareDip}` +
-		`.t0{animation-name:t0}.t1{animation-name:t1}.t2{animation-name:t2}.t3{animation-name:t3}.pointer{animation-name:pointer}` +
+		`.t1{animation-name:t1}.t2{animation-name:t2}.t3{animation-name:t3}.pointer{animation-name:pointer}` +
 		fadeWindow("muteOn", 11, 89) +
 		fadeWindow("handOn", 41, 89) +
 		fadeWindow("shareOn", 59, 89) +
@@ -291,21 +293,20 @@ export function demoSvg(): string {
 			[61, "scale(1)"],
 			[100, "scale(1)"],
 		]) +
-		keyframes("t0", "opacity", [
-			[0, "1"],
-			[11, "1"],
-			[14, "0"],
-			[89, "0"],
-			[93, "1"],
-			[100, "1"],
+		keyframes("t1", "opacity", [
+			[0, "0"],
+			[11, "0"],
+			[14, "1"],
+			[89, "1"],
+			[93, "0"],
+			[100, "0"],
 		]) +
-		fadeWindow("t1", 11, 39) +
 		keyframes("t2", "opacity", [
 			[0, "0"],
 			[39, "0"],
 			[42, "1"],
-			[59, "1"],
-			[62, "0"],
+			[89, "1"],
+			[93, "0"],
 			[100, "0"],
 		]) +
 		keyframes("t3", "opacity", [
