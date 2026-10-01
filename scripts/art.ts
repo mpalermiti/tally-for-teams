@@ -178,9 +178,150 @@ export function socialSvg(): string {
 	);
 }
 
+function icon(name: GlyphName, color: string, x: number, y: number, size = 30): string {
+	return `<g transform="translate(${x} ${y}) scale(${size / 24})" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${GLYPHS[name]}</g>`;
+}
+
+/** One toolbar button: icon over a label, optionally highlighted like Teams does. */
+function toolButton(index: number, glyph: GlyphName, label: string, highlighted = false): string {
+	return (
+		`<g transform="translate(${24 + index * 108} 18)">` +
+		(highlighted ? `<rect x="-6" y="-6" width="96" height="92" rx="16" fill="${AMBER}" opacity=".22"/>` : "") +
+		icon(glyph, INK, 27, 6) +
+		`<text x="42" y="70" text-anchor="middle" font-family="${FONT}" font-size="15" fill="#3A3A3C">${label}</text></g>`
+	);
+}
+
+/** A simplified meeting toolbar (not Microsoft's artwork) in one state. */
+function toolbar(state: Partial<MeetingState>): string {
+	const muted = state.isMuted ?? false;
+	return (
+		`<rect width="600" height="120" rx="22" fill="#FFFFFF" stroke="#E5E5EA" stroke-width="2"/>` +
+		toolButton(0, muted ? "mic-off" : "mic", muted ? "Unmute" : "Mute") +
+		toolButton(1, "video", "Camera") +
+		toolButton(2, "hand", state.isHandRaised ? "Lower" : "React", state.isHandRaised) +
+		toolButton(3, "screen-share", state.isSharing ? "Stop" : "Share", state.isSharing) +
+		`<g transform="translate(456 30)"><rect width="124" height="60" rx="14" fill="#D83A31"/>${icon("phone-off", "#FFFFFF", 16, 17, 26)}` +
+		`<text x="52" y="37" font-family="${FONT}" font-size="17" font-weight="600" fill="#FFFFFF">Leave</text></g>`
+	);
+}
+
+/** CSS keyframes from [percent, value] stops. */
+const keyframes = (name: string, property: "opacity" | "transform", stops: [number, string][]) =>
+	`@keyframes ${name}{${stops.map(([at, value]) => `${at}%{${property}:${value}}`).join("")}}`;
+
+/** Fade in at `on`, out at `off` (each over 3% of the loop). */
+const fadeWindow = (name: string, on: number, off: number) =>
+	keyframes(name, "opacity", [
+		[0, "0"],
+		[on, "0"],
+		[on + 3, "1"],
+		[off, "1"],
+		[off + 4, "0"],
+		[100, "0"],
+	]);
+
+/** The demo: press Mute, raise a hand in Teams, press Share; keys and Teams stay in step. */
+export function demoSvg(): string {
+	const ids = new Ids();
+	const W = 1360;
+	const H = 480;
+	const scale = 0.56;
+	const beats: Partial<MeetingState>[] = [
+		{ isMuted: true, isVideoOn: true },
+		{ isMuted: false, isVideoOn: true },
+		{ isMuted: false, isVideoOn: true, isHandRaised: true },
+		{ isMuted: false, isVideoOn: true, isHandRaised: true, isSharing: true },
+	];
+	const final = inMeeting(beats[3]);
+	// Keys that change: index → [state before, class of the lit layer].
+	const changing: Record<number, [Partial<MeetingState>, string]> = {
+		0: [beats[0], "mute-on"],
+		2: [beats[1], "hand-on"],
+		3: [beats[2], "share-on"],
+	};
+	const keyAt = (index: number, slot: Slot) => {
+		const change = changing[index];
+		if (!change) return face(slot, final, ids);
+		const [before, cls] = change;
+		return `${face(slot, inMeeting(before), ids)}<g class="a ${cls}" opacity="1">${face(slot, final, ids)}</g>`;
+	};
+	const keyClass = (index: number) => (index === 0 ? "a dip mute-dip" : index === 3 ? "a dip share-dip" : "");
+
+	const frames = beats.map((state, i) => `<g class="a t${i}" opacity="${i === 3 ? 1 : 0}">${toolbar(state)}</g>`).join("");
+	const pointer =
+		`<g class="a pointer" opacity="0"><path d="M0 0 L0 30 L8 23 L13 34 L18 32 L13 21 L23 21 Z" fill="${INK}" stroke="#FFFFFF" stroke-width="2" stroke-linejoin="round"/></g>`;
+
+	const toolbarX = 700;
+	const toolbarY = (H - 120) / 2;
+	const handX = toolbarX + 24 + 2 * 108 + 40;
+	const handY = toolbarY + 18 + 30;
+	const css =
+		`.a{animation-duration:10s;animation-iteration-count:infinite;animation-timing-function:ease-in-out}` +
+		`.dip{transform-box:fill-box;transform-origin:center}` +
+		`.mute-on{animation-name:muteOn}.hand-on{animation-name:handOn}.share-on{animation-name:shareOn}` +
+		`.mute-dip{animation-name:muteDip}.share-dip{animation-name:shareDip}` +
+		`.t0{animation-name:t0}.t1{animation-name:t1}.t2{animation-name:t2}.t3{animation-name:t3}.pointer{animation-name:pointer}` +
+		fadeWindow("muteOn", 11, 89) +
+		fadeWindow("handOn", 41, 89) +
+		fadeWindow("shareOn", 59, 89) +
+		keyframes("muteDip", "transform", [
+			[0, "scale(1)"],
+			[9, "scale(1)"],
+			[11, "scale(.93)"],
+			[13, "scale(1)"],
+			[100, "scale(1)"],
+		]) +
+		keyframes("shareDip", "transform", [
+			[0, "scale(1)"],
+			[57, "scale(1)"],
+			[59, "scale(.93)"],
+			[61, "scale(1)"],
+			[100, "scale(1)"],
+		]) +
+		keyframes("t0", "opacity", [
+			[0, "1"],
+			[11, "1"],
+			[14, "0"],
+			[89, "0"],
+			[93, "1"],
+			[100, "1"],
+		]) +
+		fadeWindow("t1", 11, 39) +
+		keyframes("t2", "opacity", [
+			[0, "0"],
+			[39, "0"],
+			[42, "1"],
+			[59, "1"],
+			[62, "0"],
+			[100, "0"],
+		]) +
+		keyframes("t3", "opacity", [
+			[0, "0"],
+			[59, "0"],
+			[62, "1"],
+			[89, "1"],
+			[93, "0"],
+			[100, "0"],
+		]) +
+		`@keyframes pointer{0%,28%{opacity:0;transform:translate(${W - 90}px,${H - 60}px)}31%{opacity:1;transform:translate(${W - 90}px,${H - 60}px)}` +
+		`38%{opacity:1;transform:translate(${handX}px,${handY}px) scale(1)}40%{opacity:1;transform:translate(${handX}px,${handY}px) scale(.88)}` +
+		`42%{opacity:1;transform:translate(${handX}px,${handY}px) scale(1)}47%,100%{opacity:0;transform:translate(${handX}px,${handY}px)}}` +
+		`@media (prefers-reduced-motion:reduce){.a{animation:none}}`;
+
+	return svgDoc(
+		W,
+		H,
+		"Pressing Mute on the Stream Deck lights the key and unmutes Teams; raising your hand in Teams lights the hand key; pressing Share lights the Share key",
+		`<defs>${DEVICE_DEFS}</defs><style>${css}</style>${card(W, H)}` +
+			`<g transform="translate(56 ${(H - DEVICE_H * scale) / 2}) scale(${scale})">${device(keyAt, ids, keyClass)}</g>` +
+			`<g transform="translate(${toolbarX} ${toolbarY})">${frames}</g>${pointer}`,
+	);
+}
+
 /** Every generated SVG, by file name under docs/art/. */
 export function buildArt(): Record<string, string> {
-	return { "hero.svg": heroSvg(), "keys.svg": keysSvg(), "icon.svg": markSvg(), "social.svg": socialSvg() };
+	return { "hero.svg": heroSvg(), "keys.svg": keysSvg(), "icon.svg": markSvg(), "social.svg": socialSvg(), "demo.svg": demoSvg() };
 }
 
 if (process.argv[1] !== undefined && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {

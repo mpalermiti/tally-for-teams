@@ -14,4 +14,12 @@ describe("docs/art", () => {
 		expect(hero).toContain("radialGradient"); // lit keys (mic, camera, leave)
 		expect(hero).not.toContain('id="g"'); // key gradient ids are made unique
 	});
+
+	it("animates the demo on a loop, small and still for reduced motion", () => {
+		const demo = buildArt()["demo.svg"];
+		expect(demo).toContain("@keyframes");
+		expect(demo).toContain("prefers-reduced-motion");
+		expect(Buffer.byteLength(demo)).toBeLessThan(150_000);
+		expect(demo).not.toContain('id="g"');
+	});
 });
