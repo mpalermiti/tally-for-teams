@@ -16,6 +16,16 @@ describe("docs/art", () => {
 		expect(hero).not.toContain('id="g"'); // key gradient ids are made unique
 	});
 
+	it("draws compact keys as two phone-legible rows", () => {
+		const keys = buildArt()["keys-compact.svg"];
+		expect(keys).toBeDefined();
+		expect(keys).toContain('viewBox="0 0 720 420"');
+		expect(keys).toContain('aria-label="The seven Tally keys: Mute, Camera, Raise hand, Share, Chat, React and Leave"');
+		expect(keys).toContain('translate(12 0)');
+		expect(keys).toContain('translate(104 220)');
+		expect(keys).not.toContain('id="g"');
+	});
+
 	it("animates the demo on a loop, small and still for reduced motion", () => {
 		const demo = buildArt()["demo.svg"];
 		expect(demo).toContain("@keyframes");

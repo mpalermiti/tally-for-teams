@@ -4,6 +4,7 @@
  *   docs/art/hero.svg          a Stream Deck MK.2 mid-meeting
  *   docs/art/demo.svg          animated: press Mute, raise a hand in Teams, press Share
  *   docs/art/keys.svg          the seven keys, labelled
+ *   docs/art/keys-compact.svg  the seven keys in two phone-sized rows
  *   docs/art/icon.svg          favicon (the plugin mark)
  *   docs/art/social.svg        1280×640 link preview
  *   docs/art/social.png        Chrome-rendered link preview PNG (browser/SF Pro text)
@@ -145,27 +146,61 @@ export function heroSvg(): string {
 	);
 }
 
+const KEY_STRIP_KEYS: [Slot, string][] = [
+	[{ kind: "mute" }, "Mute"],
+	[{ kind: "camera" }, "Camera"],
+	[{ kind: "hand" }, "Raise hand"],
+	[{ kind: "share" }, "Share"],
+	[{ kind: "chat" }, "Chat"],
+	[{ kind: "react", reaction: "like" }, "React"],
+	[{ kind: "leave" }, "Leave"],
+];
+
+function labeledKey(slot: Slot, label: string, ids: Ids, snapshot: Snapshot, fontSize = 22): string {
+	return (
+		keyCap(face(slot, snapshot, ids), ids, { hairline: false, shadow: true }) +
+		`<text x="${KEY / 2}" y="${KEY + 40}" text-anchor="middle" font-family="${FONT}" font-size="${fontSize}" fill="${INK}">${label}</text>`
+	);
+}
+
 /** The seven keys in a row, lit as in a meeting, each labelled. For the site. */
 export function keysSvg(): string {
 	const ids = new Ids();
 	const snapshot = inMeeting({ isMuted: false, isVideoOn: true, isHandRaised: true, isSharing: true });
-	const keys: [Slot, string][] = [
-		[{ kind: "mute" }, "Mute"],
-		[{ kind: "camera" }, "Camera"],
-		[{ kind: "hand" }, "Raise hand"],
-		[{ kind: "share" }, "Share"],
-		[{ kind: "chat" }, "Chat"],
-		[{ kind: "react", reaction: "like" }, "React"],
-		[{ kind: "leave" }, "Leave"],
-	];
 	const STEP = KEY + 56;
-	const W = keys.length * KEY + (keys.length - 1) * 56;
+	const W = KEY_STRIP_KEYS.length * KEY + (KEY_STRIP_KEYS.length - 1) * 56;
 	const H = KEY + 52;
 	let body = "";
-	keys.forEach(([slot, label], i) => {
-		body +=
-			`<g transform="translate(${i * STEP} 0)">${keyCap(face(slot, snapshot, ids), ids, { hairline: false, shadow: true })}` +
-			`<text x="${KEY / 2}" y="${KEY + 40}" text-anchor="middle" font-family="${FONT}" font-size="22" fill="${INK}">${label}</text></g>`;
+	KEY_STRIP_KEYS.forEach(([slot, label], i) => {
+		body += `<g transform="translate(${i * STEP} 0)">${labeledKey(slot, label, ids, snapshot)}</g>`;
+	});
+	return svgDoc(
+		W,
+		H,
+		"The seven Tally keys: Mute, Camera, Raise hand, Share, Chat, React and Leave",
+		`<defs><filter id="keyStripShadow" x="-12%" y="-8%" width="124%" height="126%"><feGaussianBlur stdDeviation="4"/></filter></defs>${body}`,
+	);
+}
+
+/** The same seven keys in two centered, phone-legible rows. */
+export function keysCompactSvg(): string {
+	const ids = new Ids();
+	const snapshot = inMeeting({ isMuted: false, isVideoOn: true, isHandRaised: true, isSharing: true });
+	const W = 720;
+	const H = 420;
+	const STEP = KEY + 40;
+	const ROW_GAP = 220;
+	const rows = [KEY_STRIP_KEYS.slice(0, 4), KEY_STRIP_KEYS.slice(4)];
+	let body = "";
+	rows.forEach((row, rowIndex) => {
+		const rowWidth = row.length * KEY + (row.length - 1) * 40;
+		const x = (W - rowWidth) / 2;
+		const y = rowIndex * ROW_GAP;
+		body += `<g transform="translate(${x} ${y})">`;
+		row.forEach(([slot, label], i) => {
+			body += `<g transform="translate(${i * STEP} 0)">${labeledKey(slot, label, ids, snapshot, 24)}</g>`;
+		});
+		body += "</g>";
 	});
 	return svgDoc(
 		W,
@@ -241,9 +276,10 @@ const fadeWindow = (name: string, on: number, off: number) =>
 /** The demo: press Mute, raise a hand in Teams, press Share; keys and Teams stay in step. */
 export function demoSvg(): string {
 	const ids = new Ids();
-	const W = 1360;
-	const H = 480;
-	const scale = 0.56;
+	const W = 980;
+	const H = 680;
+	const deviceScale = 0.55;
+	const toolbarScale = 1.55;
 	const beats: Partial<MeetingState>[] = [
 		{ isMuted: true, isVideoOn: true },
 		{ isMuted: false, isVideoOn: true },
@@ -271,10 +307,12 @@ export function demoSvg(): string {
 	const pointer =
 		`<g class="a pointer" opacity="0"><path d="M0 0 L0 30 L8 23 L13 34 L18 32 L13 21 L23 21 Z" fill="${INK}" stroke="#FFFFFF" stroke-width="2" stroke-linejoin="round"/></g>`;
 
-	const toolbarX = 700;
-	const toolbarY = (H - 120) / 2;
-	const handX = toolbarX + 24 + 2 * 108 + 40;
-	const handY = toolbarY + 18 + 30;
+	const deviceX = (W - DEVICE_W * deviceScale) / 2;
+	const deviceY = 46;
+	const toolbarX = (W - 600 * toolbarScale) / 2;
+	const toolbarY = 438;
+	const handX = toolbarX + toolbarScale * (24 + 2 * 108 + 40);
+	const handY = toolbarY + toolbarScale * (18 + 30);
 	const css =
 		`.a{animation-duration:10s;animation-iteration-count:infinite;animation-timing-function:ease-in-out}` +
 		`.dip{transform-box:fill-box;transform-origin:center}` +
@@ -332,14 +370,21 @@ export function demoSvg(): string {
 		H,
 		"Pressing Mute on the Stream Deck lights the key and unmutes Teams; raising your hand in Teams lights the hand key; pressing Share lights the Share key",
 		`<defs>${DEVICE_DEFS}</defs><style>${css}</style>${card(W, H)}` +
-			`<g transform="translate(56 ${(H - DEVICE_H * scale) / 2}) scale(${scale})">${device(keyAt, ids, keyClass)}</g>` +
-			`<g transform="translate(${toolbarX} ${toolbarY})">${frames}</g>${pointer}`,
+			`<g transform="translate(${deviceX} ${deviceY}) scale(${deviceScale})">${device(keyAt, ids, keyClass)}</g>` +
+			`<g transform="translate(${toolbarX} ${toolbarY}) scale(${toolbarScale})">${frames}</g>${pointer}`,
 	);
 }
 
 /** Every generated SVG, by file name under docs/art/. */
 export function buildArt(): Record<string, string> {
-	return { "hero.svg": heroSvg(), "keys.svg": keysSvg(), "icon.svg": markSvg(), "social.svg": socialSvg(), "demo.svg": demoSvg() };
+	return {
+		"hero.svg": heroSvg(),
+		"keys.svg": keysSvg(),
+		"keys-compact.svg": keysCompactSvg(),
+		"icon.svg": markSvg(),
+		"social.svg": socialSvg(),
+		"demo.svg": demoSvg(),
+	};
 }
 
 const sha256 = (markup: string) => createHash("sha256").update(markup).digest("hex");

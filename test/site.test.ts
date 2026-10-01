@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 const read = (path: string) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 /** Where a page path lives in the repo: art/ is copied from docs/art/ when the site is built. */
 const inRepo = (ref: string) => new URL(`../${ref.startsWith("art/") ? `docs/${ref}` : `site/${ref}`}`, import.meta.url);
+const srcsetRefs = (value: string) => value.split(",").map((candidate) => candidate.trim().split(/\s+/)[0]).filter(Boolean);
 
 describe("site", () => {
 	const html = read("site/index.html");
@@ -12,6 +13,7 @@ describe("site", () => {
 	it("loads nothing from other sites, and everything it loads exists", () => {
 		const refs = [
 			...[...html.matchAll(/\bsrc\s*=\s*["']([^"']+)["']/gi)].map((m) => m[1]),
+			...[...html.matchAll(/\bsrcset\s*=\s*["']([^"']+)["']/gi)].flatMap((m) => srcsetRefs(m[1])),
 			...[...html.matchAll(/<link\b[^>]*>/gi)]
 				.filter((m) => !/rel=["']canonical["']/i.test(m[0]))
 				.map((m) => /\bhref\s*=\s*["']([^"']+)["']/i.exec(m[0])?.[1] ?? ""),
@@ -22,6 +24,10 @@ describe("site", () => {
 			expect(ref, ref).not.toMatch(/^([a-z][a-z0-9+.-]*:|\/\/)/i);
 			expect(existsSync(inRepo(ref)), `missing ${ref}`).toBe(true);
 		}
+	});
+
+	it("serves a compact key strip on phones", () => {
+		expect(html).toContain('<source media="(max-width: 734px)" srcset="art/keys-compact.svg">');
 	});
 
 	it("runs no scripts", () => {
