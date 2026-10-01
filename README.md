@@ -22,7 +22,7 @@ When you press a key, macOS asks to let **Stream Deck** control your computer. T
 
 Until access is on, keys stay dimmed and the dial says *Allow / Accessibility*.
 
-Tally reads meeting buttons: their labels and styling. It never reads messages, chat, people's names, or window titles. There is no cloud service, account, or Graph permission involved.
+Tally reads meeting buttons (their labels and styling) and items of menus it opens. It never reads messages, chat, or window titles, and logs menu controls by id only. There is no cloud service, account, or Graph permission involved.
 
 ## Keys
 
@@ -141,7 +141,7 @@ Pre-release tags like `v1.1.0-rc.1` publish pre-releases; for those, the npm ver
 
 ## Notes
 
-- **Privacy:** the helper only reads buttons, toggles, and menu items (their labels and styling), never messages, chat rows, people's names, or window titles. Menu items are matched only if they appeared after the plugin opened the menu, so a chat message's "Like" can never be pressed.
+- **Privacy:** the helper reads meeting buttons (their labels and styling) and items of menus it opens, never messages, chat, or window titles. It logs menu controls by id only. Menu items are matched only if they appeared after the plugin opened the menu, so a chat message's "Like" can never be pressed.
 - **Limits:** it can only use what Teams shows on screen, so it can't join meetings, set presence, or read your calendar. A Teams interface update can break a button until `selectors.ts` is updated.
 - **Glyphs:** from [Lucide](https://lucide.dev) (ISC; parts MIT); `wow` is custom on the same grid. License in [`ai.michaelp.tally.sdPlugin/lucide.LICENSE.txt`](ai.michaelp.tally.sdPlugin/lucide.LICENSE.txt).
 - **Settings pages:** use [sdpi-components](https://sdpi-components.dev) (MIT), which bundles [Lit](https://lit.dev) (BSD-3-Clause); both are shipped with the plugin, with their licenses in [`ai.michaelp.tally.sdPlugin/ui/sdpi-components.LICENSE.txt`](ai.michaelp.tally.sdPlugin/ui/sdpi-components.LICENSE.txt).

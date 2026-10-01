@@ -235,7 +235,7 @@ func menu(_ id: String, itemIds: [String], labels: [String], req: Any?) {
 	}
 
 	guard let item else {
-		let offered = fresh.map { "\(domID($0) ?? "?") \"\(label($0) ?? "")\"" }.prefix(25).joined(separator: " | ")
+		let offered = fresh.compactMap { domID($0) }.prefix(25).joined(separator: " | ")
 		closeMenu(app, items: fresh, button: button)
 		return result(req, false, "No \(itemIds.first ?? labels.first ?? "item") in \(id) menu; it offered: \(offered.isEmpty ? "nothing" : offered)")
 	}
