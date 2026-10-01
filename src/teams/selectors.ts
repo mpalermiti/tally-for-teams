@@ -162,7 +162,7 @@ export function commandFor(action: TeamsAction, parameters: ActionParameters): B
 		case "toggle-ui":
 			return { cmd: "press", id: type === "chat" ? BUTTON_IDS.chat : BUTTON_IDS.share };
 		case "stop-sharing":
-			return { cmd: "press", id: BUTTON_IDS.share }; // UNVERIFIED: the share button stops sharing while presenting
+			return { cmd: "press", id: BUTTON_IDS.share }; // While presenting, the share button reads "Stop sharing" and stops it (confirmed live).
 		case "send-reaction": {
 			const item = REACTION_ITEMS[(type as Reaction) ?? "like"] ?? REACTION_ITEMS.like;
 			return { cmd: "menu", id: BUTTON_IDS.react, itemIds: [item.id], labels: item.labels };
