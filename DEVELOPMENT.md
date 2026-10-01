@@ -39,11 +39,12 @@ npm run icons           # regenerate glyphs.ts and every PNG after design change
 npm run sheet -- out.png   # render all keys in all states to one image
 ```
 
-`npm run art` regenerates the README and site art in `docs/art/` from the key renderer; a test
-fails if it's stale. `docs/keys.png` (`npm run sheet -- docs/keys.png`) shows every key in every
-state. The site is plain HTML/CSS in `site/`, published by `.github/workflows/pages.yml`.
+`npm run art` regenerates the README and site art in `docs/art/` from the key renderer, including
+the link preview and favicon PNGs; a test fails if anything is stale. `docs/keys.png`
+(`npm run sheet -- docs/keys.png`) shows every key in every state. The site is plain HTML/CSS in
+`site/`; `.github/workflows/pages.yml` publishes it with `docs/art/` once the repo is public.
 
-CI (`.github/workflows/build.yml`) builds, tests, and packs on pushes to `main`, pull requests, and version tags; docs-only changes are skipped. Pushing a tag `vX.Y.Z` matching `package.json` and `manifest.json`, checked by `npm run version:check`, publishes a GitHub Release with `Tally.streamDeckPlugin` attached.
+CI (`.github/workflows/build.yml`) builds, tests, and packs on pushes to `main`, pull requests, and version tags; Markdown-only changes are skipped. Pushing a tag `vX.Y.Z` matching `package.json` and `manifest.json`, checked by `npm run version:check`, publishes a GitHub Release with `Tally.streamDeckPlugin` attached.
 
 ### Probing Teams
 
