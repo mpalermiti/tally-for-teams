@@ -6,11 +6,12 @@
  *   docs/art/keys.svg          the seven keys, labelled
  *   docs/art/keys-compact.svg  the seven keys in two phone-sized rows
  *   docs/art/icon.svg          favicon (the plugin mark)
+ *   docs/art/apple-touch-icon.svg full-bleed opaque iOS touch icon
  *   docs/art/social.svg        1280×640 link preview
  *   docs/art/social.png        Chrome-rendered link preview PNG (browser/SF Pro text)
- *   docs/art/social.png.source sha256 of the social.svg markup rendered into social.png
+ *   docs/art/social.png.source sha256 of the social.svg markup and render settings
  *   docs/art/icon-32.png       Chrome-rendered 32×32 favicon PNG from icon.svg
- *   docs/art/apple-touch-icon.png Chrome-rendered 180×180 touch icon PNG from icon.svg
+ *   docs/art/apple-touch-icon.png Chrome-rendered 180×180 touch icon PNG from apple-touch-icon.svg
  * Run `npm run art` after changing the key design; test/art.test.ts fails if these are stale.
  */
 import { execFileSync } from "node:child_process";
@@ -43,6 +44,9 @@ const INK = "#1D1D1F";
 const SOFT_INK = "#6E6E73";
 const PAPER = "#F5F5F7";
 const AMBER = "#F7B93E";
+const MARK_GLOW_INNER = "#FFD989";
+const MARK_GLOW_OUTER = "#F2AE2E";
+const MARK_INK = "#1E1507";
 
 const KEY = 144;
 const GAP = 34;
@@ -238,6 +242,21 @@ function icon(name: GlyphName, color: string, x: number, y: number, size = 30): 
 	return `<g transform="translate(${x} ${y}) scale(${size / 24})" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${GLYPHS[name]}</g>`;
 }
 
+/** iOS supplies the rounded mask, so the touch icon is a full-bleed opaque square. */
+export function touchIconSvg(): string {
+	const size = 180;
+	const glyphSize = size * (112 / 256);
+	const offset = (size - glyphSize) / 2;
+	return svgDoc(
+		size,
+		size,
+		"Tally for Teams",
+		`<defs><radialGradient id="g" cx="50%" cy="40%" r="75%"><stop offset="0" stop-color="${MARK_GLOW_INNER}"/><stop offset="1" stop-color="${MARK_GLOW_OUTER}"/></radialGradient></defs>` +
+			`<rect width="${size}" height="${size}" fill="url(#g)"/>` +
+			icon("mic", MARK_INK, offset, offset, glyphSize),
+	);
+}
+
 /** One toolbar button: icon over a label, optionally highlighted like Teams does. */
 function toolButton(index: number, glyph: GlyphName, label: string, highlighted = false): string {
 	return (
@@ -388,24 +407,38 @@ export function buildArt(): Record<string, string> {
 		"keys.svg": keysSvg(),
 		"keys-compact.svg": keysCompactSvg(),
 		"icon.svg": markSvg(),
+		"apple-touch-icon.svg": touchIconSvg(),
 		"social.svg": socialSvg(),
 		"demo.svg": demoSvg(),
 	};
 }
 
+const PNG_BACKGROUND_COLOR = "00000000";
+
 export const PNG_RENDERS = [
-	{ name: "social.png", source: "social.svg", width: 1280, height: 640, fit: false },
-	{ name: "icon-32.png", source: "icon.svg", width: 32, height: 32, fit: true },
-	{ name: "apple-touch-icon.png", source: "icon.svg", width: 180, height: 180, fit: true },
+	{ name: "social.png", source: "social.svg", width: 1280, height: 640, fit: false, backgroundColor: PNG_BACKGROUND_COLOR },
+	{ name: "icon-32.png", source: "icon.svg", width: 32, height: 32, fit: true, backgroundColor: PNG_BACKGROUND_COLOR },
+	{ name: "apple-touch-icon.png", source: "apple-touch-icon.svg", width: 180, height: 180, fit: true, backgroundColor: PNG_BACKGROUND_COLOR },
 ] as const satisfies readonly {
 	name: string;
 	source: keyof ReturnType<typeof buildArt>;
 	width: number;
 	height: number;
 	fit: boolean;
+	backgroundColor: string;
 }[];
 
 const sha256 = (markup: string) => createHash("sha256").update(markup).digest("hex");
+
+const renderHashInput = (target: (typeof PNG_RENDERS)[number], svg: string) => ({
+	width: target.width,
+	height: target.height,
+	fit: target.fit,
+	backgroundColor: target.backgroundColor,
+	svg,
+});
+
+const renderHash = (target: (typeof PNG_RENDERS)[number], svg: string) => sha256(JSON.stringify(renderHashInput(target, svg)));
 
 function renderUrl(out: string, target: (typeof PNG_RENDERS)[number]): string {
 	if (!target.fit) return pathToFileURL(out + target.source).href;
@@ -413,14 +446,14 @@ function renderUrl(out: string, target: (typeof PNG_RENDERS)[number]): string {
 	const html = join(tmp, "render.html");
 	writeFileSync(
 		html,
-		`<!doctype html><meta charset="utf-8"><style>html,body{width:${target.width}px;height:${target.height}px;margin:0;overflow:hidden;background:transparent}img{display:block;width:${target.width}px;height:${target.height}px}</style><img src="${pathToFileURL(out + target.source).href}" alt="">`,
+		`<!doctype html><meta charset="utf-8"><style>html,body{width:${target.width}px;height:${target.height}px;margin:0;overflow:hidden;background:#${target.backgroundColor}}img{display:block;width:${target.width}px;height:${target.height}px}</style><img src="${pathToFileURL(out + target.source).href}" alt="">`,
 	);
 	return pathToFileURL(html).href;
 }
 
 function renderPng(out: string, target: (typeof PNG_RENDERS)[number], sourceMarkup: string): void {
 	const sourcePath = out + `${target.name}.source`;
-	const sourceHash = sha256(sourceMarkup);
+	const sourceHash = renderHash(target, sourceMarkup);
 	const chrome = process.env.CHROME ?? DEFAULT_CHROME;
 
 	if (!existsSync(chrome)) {
@@ -444,7 +477,7 @@ function renderPng(out: string, target: (typeof PNG_RENDERS)[number], sourceMark
 				"--headless=new",
 				"--disable-gpu",
 				"--hide-scrollbars",
-				"--default-background-color=00000000",
+				`--default-background-color=${target.backgroundColor}`,
 				"--force-device-scale-factor=1",
 				`--window-size=${target.width},${target.height}`,
 				`--screenshot=${out}${target.name}`,

@@ -4,6 +4,19 @@ import { describe, expect, it } from "vitest";
 
 import { buildArt, PNG_RENDERS } from "../scripts/art";
 
+const pngSourceHash = (target: (typeof PNG_RENDERS)[number], svg: string) =>
+	createHash("sha256")
+		.update(
+			JSON.stringify({
+				width: target.width,
+				height: target.height,
+				fit: target.fit,
+				backgroundColor: target.backgroundColor,
+				svg,
+			}),
+		)
+		.digest("hex");
+
 describe("docs/art", () => {
 	it.each(Object.entries(buildArt()))("%s matches the key renderer (run npm run art)", (name, svg) => {
 		expect(readFileSync(new URL(`../docs/art/${name}`, import.meta.url), "utf8")).toBe(svg);
@@ -41,6 +54,17 @@ describe("docs/art", () => {
 		expect(demo).not.toContain("transform:translate(890px,620px)");
 	});
 
+	it("builds a full-bleed opaque apple touch icon", () => {
+		const touchIcon = buildArt()["apple-touch-icon.svg"];
+		expect(touchIcon).toBeDefined();
+		if (touchIcon === undefined) return;
+		expect(touchIcon).toContain('viewBox="0 0 180 180"');
+		expect(touchIcon).toContain('<rect width="180" height="180" fill="url(#g)"/>');
+		expect(touchIcon).not.toContain('x="16"');
+		expect(touchIcon).not.toContain('width="224" height="224" rx="48"');
+		expect(PNG_RENDERS.find(({ name }) => name === "apple-touch-icon.png")?.source).toBe("apple-touch-icon.svg");
+	});
+
 	it("stacks demo toolbar frames over an opaque base so fades stay solid", () => {
 		const demo = buildArt()["demo.svg"];
 		expect(demo).toContain('<g class="t0" opacity="1">');
@@ -51,9 +75,16 @@ describe("docs/art", () => {
 		expect(demo).toContain("@keyframes t3{0%{opacity:0}59%{opacity:0}62%{opacity:1}89%{opacity:1}93%{opacity:0}100%{opacity:0}}");
 	});
 
-	it.each(PNG_RENDERS)("keeps $name rendered from the current $source (run npm run art)", ({ name, source }) => {
-		const expected = createHash("sha256").update(buildArt()[source]).digest("hex");
+	it.each(PNG_RENDERS)("keeps $name rendered from the current $source and settings (run npm run art)", (target) => {
+		const { name, source } = target;
+		const expected = pngSourceHash(target, buildArt()[source]);
 		expect(readFileSync(new URL(`../docs/art/${name}`, import.meta.url)).byteLength).toBeGreaterThan(0);
 		expect(readFileSync(new URL(`../docs/art/${name}.source`, import.meta.url), "utf8").trim()).toBe(expected);
+	});
+
+	it.each(PNG_RENDERS)("renders $name at its configured size", ({ name, width, height }) => {
+		const png = readFileSync(new URL(`../docs/art/${name}`, import.meta.url));
+		expect(png.readUInt32BE(16)).toBe(width);
+		expect(png.readUInt32BE(20)).toBe(height);
 	});
 });
