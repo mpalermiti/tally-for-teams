@@ -10,7 +10,7 @@ Live Microsoft Teams controls for Stream Deck on Mac.
 
 **Stays out of your way.** Works with Teams in the background and never pulls it to the front.
 
-**No accidental hang-ups.** Turn on *Hold to leave* and a tap on Leave can't end your meeting.
+**No accidental hang-ups.** Leave can require a hold.
 
 **Private by design.** Runs entirely on your Mac. No account, no cloud. It reads only Teams' meeting buttons.
 
@@ -37,8 +37,8 @@ On a **Stream Deck+**, put Mute on a dial: tap to toggle, hold to talk, turn rig
 ## Set up
 
 1. [Download Tally](https://github.com/mpalermiti/tally-for-teams/releases/latest/download/Tally.streamDeckPlugin) and double-click it.
-2. Press any Tally key. macOS asks to let **Stream Deck** control your computer: turn it on in System Settings → Privacy & Security → Accessibility. (Teams no longer offers a control API, so Tally works the way a screen reader does.)
-3. Drag the keys you want from **Tally for Teams** onto your Stream Deck. For Leave, consider turning on *Hold to leave* in its settings.
+2. Drag the keys you want from **Tally for Teams** onto your Stream Deck. For Leave, consider turning on *Hold to leave* in its settings. (In a Multi Action, Leave still acts at once.)
+3. Press any Tally key. macOS asks to let **Stream Deck** control your computer: turn it on in System Settings → Privacy & Security → Accessibility. (Teams no longer offers a control API, so Tally works the way a screen reader does.) Until it's on, keys stay dark and a Stream Deck+ dial says *Allow / Accessibility*.
 
 **Updating:** download the latest release and double-click it; your keys stay put. To hear about new versions, watch this repo → Custom → Releases.
 
