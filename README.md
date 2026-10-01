@@ -26,22 +26,21 @@ Tally reads meeting buttons: their labels and styling. It never reads messages, 
 
 ## Keys
 
-One rule: a lit key means it's live. Warm = your mic is hot, camera is on, your hand is up, you're sharing, or chat has unread messages. Dark = off. Dimmed = not in a meeting, or that control isn't available right now (dimmer still = Teams isn't readable). Leave turns red during a meeting.
+One rule: a lit key means it's live. Warm = your mic is hot, camera is on, your hand is up, or you're sharing. Dark = off. Dimmed = not in a meeting, or that control isn't available right now (dimmer still = Teams isn't readable). Leave turns red during a meeting.
 
-Status reflects Teams 26267.1701.5163.3395.
+Tested with Teams 26267.1701.5163.3395.
 
-| Key | Press | Lit when | Status |
-|---|---|---|---|
-| Mute | toggle mic (also a Stream Deck+ dial, see below) | mic is live | ✅ verified |
-| Camera | toggle camera | camera is on | ✅ verified |
-| Leave | leave the meeting (optionally only on a hold) | (red during a meeting) | ✅ verified |
-| Chat | open / close meeting chat | unread messages* | button verified |
-| Share | open the share tray; while presenting, stop sharing | sharing | ✅ verified |
-| React | send the chosen reaction (Like, Love, Applause, Laugh, Wow) via the React menu | — | ✅ verified |
-| Raise hand | raise / lower via the React menu | hand is up† | ✅ verified |
+| Key | Press | Lit when |
+|---|---|---|
+| Mute | toggle mic (also a Stream Deck+ dial, see below) | mic is live |
+| Camera | toggle camera | camera is on |
+| Leave | leave the meeting (optionally only on a hold) | (red during a meeting) |
+| Chat | open / close meeting chat | — |
+| Share | open the share tray; while presenting, stop sharing | sharing |
+| React | send the chosen reaction (Like, Love, Applause, Laugh, Wow) via the React menu | — |
+| Raise hand | raise / lower via the React menu | hand is up* |
 
-\* Unverified: the label Teams shows for unread messages. Until it's confirmed, the Chat key may not light; pressing it still opens chat.
-† Teams says whether your hand is up only in a hover tooltip, but it restyles the React button while it is. The plugin compares React with the plain toolbar buttons (People, More, Chat), so it doesn't depend on Teams' generated class names.
+\* Teams says whether your hand is up only in a hover tooltip, but it restyles the React button while it is. The plugin compares React with the plain toolbar buttons (People, More, Chat), so it doesn't depend on Teams' generated class names.
 
 **Leave:** turn on *Hold to leave* in its settings so a tap can't hang up. Hold for about half a second; a ring fills, then you leave. (In a Multi Action, Leave still acts at once.)
 

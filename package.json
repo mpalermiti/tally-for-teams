@@ -1,6 +1,6 @@
 {
   "name": "tally-for-teams",
-  "version": "1.0.0-rc.1",
+  "version": "1.0.0",
   "description": "Stream Deck plugin for Microsoft Teams meeting controls, via the Teams local third-party app API.",
   "scripts": {
     "build": "npm run build:bridge && rollup -c",
