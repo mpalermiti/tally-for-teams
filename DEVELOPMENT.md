@@ -1,0 +1,83 @@
+# Developing Tally for Teams
+
+## How it works
+
+```
+Stream Deck ──▶ plugin (Node, src/)  ──stdin/stdout JSON──▶  teams-bridge (Swift, bridge/)  ──Accessibility──▶ Teams
+                 knows what buttons mean                        finds buttons by web id, reads
+                 (src/teams/selectors.ts)                       labels and styles, presses them
+```
+
+- **Finding the controls:** Teams exposes its accessibility tree only to assistive tech, so the helper sets the same switch VoiceOver does (`AXEnhancedUserInterface`) while it runs, and turns it off when it quits.
+- **One window at a time:** a meeting can have a full window and a compact view that swap in and out. The helper takes every button from the one window holding the mic button and the most of the others, so the two toolbars are never mixed.
+- **Keeping up with state:** it finds the toolbar buttons once, then re-reads just those every half second (about 0 ms). A full rescan (50–450 ms) happens within 2 s of any watched button going stale (Teams rebuilds the toolbar when sharing starts), and every 10 s in a meeting.
+- **State Teams only shows as styling:** a raised hand keeps React's label; only its look changes. The plugin compares React with the plain toolbar buttons instead of matching Teams' generated class names, which change between builds.
+- **When Teams changes its interface:** button ids and label rules all live in `src/teams/selectors.ts`. The probes show what the current Teams exposes: `teams-ax-probe.swift` lists the toolbar, and `teams-ax-diff.swift` prints what changes as you do something.
+
+## Development
+
+Building requires Node.js and Apple's command-line tools (`xcode-select --install`) to compile the Accessibility helper.
+
+Build from source:
+
+```bash
+npm install
+npm run pack                    # builds dist/ai.michaelp.tally.streamDeckPlugin; double-click to install
+npm run build && npm run link    # development install; needs the Elgato CLI: npm i -g @elgato/cli
+```
+
+Useful scripts:
+
+```bash
+npm test                # unit tests: selectors, bridge process handling, key/dial visuals, dial gestures
+npm run typecheck
+npm run build           # compiles bin/teams-bridge (Swift) and bundles bin/plugin.js
+npm run smoke           # end-to-end: the built plugin against a fake Stream Deck + scripted bridge
+npm run smoke:package   # package smoke: unzips the packed plugin and starts its real helper
+npm run watch           # rebuild + restart the plugin in Stream Deck on save
+npm run icons           # regenerate glyphs.ts and every PNG after design changes
+npm run sheet -- out.png   # render all keys in all states to one image
+```
+
+`npm run art` regenerates the README and site art in `docs/art/` from the key renderer; a test
+fails if it's stale. `docs/keys.png` (`npm run sheet -- docs/keys.png`) shows every key in every
+state. The site is plain HTML/CSS in `site/`, published by `.github/workflows/pages.yml`.
+
+CI (`.github/workflows/build.yml`) builds, tests, and packs on pushes to `main`, pull requests, and version tags; docs-only changes are skipped. Pushing a tag `vX.Y.Z` matching `package.json` and `manifest.json`, checked by `npm run version:check`, publishes a GitHub Release with `Tally.streamDeckPlugin` attached.
+
+### Probing Teams
+
+Probe Teams directly (terminal needs Accessibility permission; run during a meeting):
+
+```bash
+swift probe/teams-ax-probe.swift              # list the meeting toolbar's buttons
+swift probe/teams-ax-probe.swift --watch      # live mute/camera labels; Ctrl-C to stop
+swift probe/teams-ax-probe.swift --press-test # press mute twice (mic blips on, then back)
+swift probe/teams-ax-probe.swift --menus      # list what the React / More / video-options menus offer
+swift probe/teams-ax-diff.swift --only reaction-menu-button,share-button
+                                              # print what changes as you raise a hand, share, …
+```
+
+### Code map
+
+```
+bridge/TeamsBridge.swift   Accessibility helper: watch ids, press, open-menu-and-press
+src/teams/selectors.ts     Teams knowledge: button ids, what labels mean, action → command
+src/teams/bridge.ts        runs the helper: status → snapshot, requests, restarts
+src/teams/protocol.ts      the meeting model keys render from
+src/render/key.ts          meeting state → key visual (pure), and the SVG key design
+src/actions/               one class per key; shared behaviour in teams-key.ts, dial gestures in gestures.ts
+src/plugin.ts              wiring: start the helper, register keys, redraw on change
+```
+
+### Releasing
+
+Releases go to [GitHub Releases](https://github.com/mpalermiti/tally-for-teams/releases), not npm (the package is private). Pushing a version tag makes CI build the plugin and attach `Tally.streamDeckPlugin`. `npm version` below only edits the version number.
+
+1. `npm version X.Y.Z --no-git-tag-version` (updates `package.json` and `package-lock.json`), and set `Version` to `X.Y.Z.0` in `ai.michaelp.tally.sdPlugin/manifest.json`.
+2. `npm run version:check`.
+3. Commit the bump.
+4. `git tag vX.Y.Z`.
+5. `git push && git push origin vX.Y.Z`.
+
+Pre-release tags like `v1.1.0-rc.1` publish pre-releases; for those, the npm version is `X.Y.Z-rc.N` and the manifest stays `X.Y.Z.0`.
