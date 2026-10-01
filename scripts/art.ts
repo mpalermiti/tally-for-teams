@@ -9,11 +9,15 @@
  *   docs/art/social.svg        1280×640 link preview
  *   docs/art/social.png        Chrome-rendered link preview PNG (browser/SF Pro text)
  *   docs/art/social.png.source sha256 of the social.svg markup rendered into social.png
+ *   docs/art/icon-32.png       Chrome-rendered 32×32 favicon PNG from icon.svg
+ *   docs/art/apple-touch-icon.png Chrome-rendered 180×180 touch icon PNG from icon.svg
  * Run `npm run art` after changing the key design; test/art.test.ts fails if these are stale.
  */
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { GLYPHS, type GlyphName } from "../src/render/glyphs";
@@ -313,6 +317,8 @@ export function demoSvg(): string {
 	const toolbarY = 438;
 	const handX = toolbarX + toolbarScale * (24 + 2 * 108 + 40);
 	const handY = toolbarY + toolbarScale * (18 + 30);
+	const pointerStartX = toolbarX + 92;
+	const pointerStartY = H - 52;
 	const css =
 		`.a{animation-duration:10s;animation-iteration-count:infinite;animation-timing-function:ease-in-out}` +
 		`.dip{transform-box:fill-box;transform-origin:center}` +
@@ -360,7 +366,7 @@ export function demoSvg(): string {
 			[93, "0"],
 			[100, "0"],
 		]) +
-		`@keyframes pointer{0%,28%{opacity:0;transform:translate(${W - 90}px,${H - 60}px)}31%{opacity:1;transform:translate(${W - 90}px,${H - 60}px)}` +
+		`@keyframes pointer{0%,28%{opacity:0;transform:translate(${pointerStartX}px,${pointerStartY}px)}31%{opacity:1;transform:translate(${pointerStartX}px,${pointerStartY}px)}` +
 		`38%{opacity:1;transform:translate(${handX}px,${handY}px) scale(1)}40%{opacity:1;transform:translate(${handX}px,${handY}px) scale(.88)}` +
 		`42%{opacity:1;transform:translate(${handX}px,${handY}px) scale(1)}47%,100%{opacity:0;transform:translate(${handX}px,${handY}px)}}` +
 		`@media (prefers-reduced-motion:reduce){.a{animation:none}}`;
@@ -387,26 +393,50 @@ export function buildArt(): Record<string, string> {
 	};
 }
 
+export const PNG_RENDERS = [
+	{ name: "social.png", source: "social.svg", width: 1280, height: 640, fit: false },
+	{ name: "icon-32.png", source: "icon.svg", width: 32, height: 32, fit: true },
+	{ name: "apple-touch-icon.png", source: "icon.svg", width: 180, height: 180, fit: true },
+] as const satisfies readonly {
+	name: string;
+	source: keyof ReturnType<typeof buildArt>;
+	width: number;
+	height: number;
+	fit: boolean;
+}[];
+
 const sha256 = (markup: string) => createHash("sha256").update(markup).digest("hex");
 
-function renderSocialPng(out: string, socialSvgMarkup: string): void {
-	const sourcePath = out + "social.png.source";
-	const sourceHash = sha256(socialSvgMarkup);
+function renderUrl(out: string, target: (typeof PNG_RENDERS)[number]): string {
+	if (!target.fit) return pathToFileURL(out + target.source).href;
+	const tmp = mkdtempSync(join(tmpdir(), "tally-art-"));
+	const html = join(tmp, "render.html");
+	writeFileSync(
+		html,
+		`<!doctype html><meta charset="utf-8"><style>html,body{width:${target.width}px;height:${target.height}px;margin:0;overflow:hidden;background:transparent}img{display:block;width:${target.width}px;height:${target.height}px}</style><img src="${pathToFileURL(out + target.source).href}" alt="">`,
+	);
+	return pathToFileURL(html).href;
+}
+
+function renderPng(out: string, target: (typeof PNG_RENDERS)[number], sourceMarkup: string): void {
+	const sourcePath = out + `${target.name}.source`;
+	const sourceHash = sha256(sourceMarkup);
 	const chrome = process.env.CHROME ?? DEFAULT_CHROME;
 
 	if (!existsSync(chrome)) {
 		const currentHash = existsSync(sourcePath) ? readFileSync(sourcePath, "utf8").trim() : "";
 		if (currentHash === sourceHash) {
-			console.warn(`social.png unchanged; Chrome not found at ${chrome}. Skipping PNG render.`);
+			console.warn(`${target.name} unchanged; Chrome not found at ${chrome}. Skipping PNG render.`);
 			return;
 		}
 		console.error(
-			`social.png is stale, but Chrome was not found at ${chrome}.\n` +
+			`${target.name} is stale, but Chrome was not found at ${chrome}.\n` +
 				`Install Google Chrome there or set CHROME=/path/to/chrome, then run npm run art.`,
 		);
 		process.exit(1);
 	}
 
+	const url = renderUrl(out, target);
 	try {
 		execFileSync(
 			chrome,
@@ -414,17 +444,20 @@ function renderSocialPng(out: string, socialSvgMarkup: string): void {
 				"--headless=new",
 				"--disable-gpu",
 				"--hide-scrollbars",
+				"--default-background-color=00000000",
 				"--force-device-scale-factor=1",
-				"--window-size=1280,640",
-				`--screenshot=${out}social.png`,
-				pathToFileURL(out + "social.svg").href,
+				`--window-size=${target.width},${target.height}`,
+				`--screenshot=${out}${target.name}`,
+				url,
 			],
 			{ stdio: ["ignore", "pipe", "pipe"] },
 		);
 	} catch (error) {
 		const stderr = error instanceof Error && "stderr" in error && Buffer.isBuffer(error.stderr) ? error.stderr.toString().trim() : "";
-		console.error(`Failed to render docs/art/social.png with Chrome.${stderr ? `\n${stderr}` : ""}`);
+		console.error(`Failed to render docs/art/${target.name} with Chrome.${stderr ? `\n${stderr}` : ""}`);
 		process.exit(1);
+	} finally {
+		if (target.fit) rmSync(fileURLToPath(new URL(".", url)), { recursive: true, force: true });
 	}
 	writeFileSync(sourcePath, `${sourceHash}\n`);
 }
@@ -434,6 +467,6 @@ if (process.argv[1] !== undefined && realpathSync(process.argv[1]) === fileURLTo
 	mkdirSync(out, { recursive: true });
 	const art = buildArt();
 	for (const [name, markup] of Object.entries(art)) writeFileSync(out + name, markup);
-	renderSocialPng(out, art["social.svg"]);
-	console.log(`art: ${Object.keys(art).join(", ")}`);
+	for (const target of PNG_RENDERS) renderPng(out, target, art[target.source]);
+	console.log(`art: ${[...Object.keys(art), ...PNG_RENDERS.map(({ name }) => name)].join(", ")}`);
 }
