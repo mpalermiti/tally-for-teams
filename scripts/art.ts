@@ -80,13 +80,19 @@ function face(slot: Slot, snapshot: Snapshot, ids: Ids): string {
 		.replaceAll("url(#g)", `url(#${id})`);
 }
 
-/** A key with rounded corners and a hairline edge; `inner` may stack several faces. */
-function keyCap(inner: string, ids: Ids): string {
+/** A key with rounded corners; `inner` may stack several faces. */
+function keyCap(inner: string, ids: Ids, options: { hairline?: boolean; shadow?: boolean } = {}): string {
 	const clip = ids.next("c");
+	const hairline = options.hairline ?? true;
 	return (
+		(options.shadow
+			? `<rect x="4" y="8" width="${KEY - 8}" height="${KEY - 2}" rx="24" fill="#000" opacity=".08" filter="url(#keyStripShadow)"/>`
+			: "") +
 		`<clipPath id="${clip}"><rect width="${KEY}" height="${KEY}" rx="24"/></clipPath>` +
 		`<g clip-path="url(#${clip})">${inner}</g>` +
-		`<rect width="${KEY}" height="${KEY}" rx="24" fill="none" stroke="#000" stroke-opacity=".5" stroke-width="2"/>`
+		(hairline
+			? `<rect width="${KEY}" height="${KEY}" rx="24" fill="none" stroke="#000" stroke-opacity=".5" stroke-width="2"/>`
+			: "")
 	);
 }
 
@@ -153,10 +159,15 @@ export function keysSvg(): string {
 	let body = "";
 	keys.forEach(([slot, label], i) => {
 		body +=
-			`<g transform="translate(${i * STEP} 0)">${keyCap(face(slot, snapshot, ids), ids)}` +
+			`<g transform="translate(${i * STEP} 0)">${keyCap(face(slot, snapshot, ids), ids, { hairline: false, shadow: true })}` +
 			`<text x="${KEY / 2}" y="${KEY + 40}" text-anchor="middle" font-family="${FONT}" font-size="22" fill="${INK}">${label}</text></g>`;
 	});
-	return svgDoc(W, H, "The seven Tally keys: Mute, Camera, Raise hand, Share, Chat, React and Leave", body);
+	return svgDoc(
+		W,
+		H,
+		"The seven Tally keys: Mute, Camera, Raise hand, Share, Chat, React and Leave",
+		`<defs><filter id="keyStripShadow" x="-12%" y="-8%" width="124%" height="126%"><feGaussianBlur stdDeviation="4"/></filter></defs>${body}`,
+	);
 }
 
 /** The 1280×640 link preview: name and one line beside the device. */
@@ -165,15 +176,16 @@ export function socialSvg(): string {
 	const snapshot = inMeeting({ isMuted: false, isVideoOn: true });
 	const W = 1280;
 	const H = 640;
-	const scale = 0.6;
+	const scale = 0.55;
 	const body = device((_, slot) => face(slot, snapshot, ids), ids);
 	return svgDoc(
 		W,
 		H,
 		"Tally for Teams",
 		`<defs>${DEVICE_DEFS}</defs><rect width="${W}" height="${H}" fill="${PAPER}"/>` +
-			`<text x="88" y="292" font-family="${FONT}" font-size="64" font-weight="700" fill="${INK}">Tally for Teams</text>` +
-			`<text x="88" y="350" font-family="${FONT}" font-size="28" fill="${SOFT_INK}">Live Teams controls for Stream Deck on Mac.</text>` +
+			`<text x="88" y="300" font-family="${FONT}" font-size="64" font-weight="700" fill="${INK}">Tally for Teams</text>` +
+			`<text x="88" y="360" font-family="${FONT}" font-size="28" fill="${SOFT_INK}">Live Teams controls</text>` +
+			`<text x="88" y="396" font-family="${FONT}" font-size="28" fill="${SOFT_INK}">for Stream Deck on Mac.</text>` +
 			`<g transform="translate(${W - DEVICE_W * scale - 64} ${(H - DEVICE_H * scale) / 2}) scale(${scale})">${body}</g>`,
 	);
 }
