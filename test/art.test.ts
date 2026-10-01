@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
@@ -31,5 +32,10 @@ describe("docs/art", () => {
 		expect(demo).toContain("@keyframes t1{0%{opacity:0}11%{opacity:0}14%{opacity:1}89%{opacity:1}93%{opacity:0}100%{opacity:0}}");
 		expect(demo).toContain("@keyframes t2{0%{opacity:0}39%{opacity:0}42%{opacity:1}89%{opacity:1}93%{opacity:0}100%{opacity:0}}");
 		expect(demo).toContain("@keyframes t3{0%{opacity:0}59%{opacity:0}62%{opacity:1}89%{opacity:1}93%{opacity:0}100%{opacity:0}}");
+	});
+
+	it("keeps social.png rendered from the current social.svg (run npm run art)", () => {
+		const expected = createHash("sha256").update(buildArt()["social.svg"]).digest("hex");
+		expect(readFileSync(new URL("../docs/art/social.png.source", import.meta.url), "utf8").trim()).toBe(expected);
 	});
 });

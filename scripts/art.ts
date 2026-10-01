@@ -1,15 +1,19 @@
 /**
  * Renders the README and site art from the plugin's own key renderer, so pictures of keys always
  * match the real thing:
- *   docs/art/hero.svg    a Stream Deck MK.2 mid-meeting
- *   docs/art/demo.svg    animated: press Mute, raise a hand in Teams, press Share
- *   docs/art/keys.svg    the seven keys, labelled
- *   docs/art/icon.svg    favicon (the plugin mark)
- *   docs/art/social.svg  1280×640 link preview, also rendered to social.png
+ *   docs/art/hero.svg          a Stream Deck MK.2 mid-meeting
+ *   docs/art/demo.svg          animated: press Mute, raise a hand in Teams, press Share
+ *   docs/art/keys.svg          the seven keys, labelled
+ *   docs/art/icon.svg          favicon (the plugin mark)
+ *   docs/art/social.svg        1280×640 link preview
+ *   docs/art/social.png        Chrome-rendered link preview PNG (browser/SF Pro text)
+ *   docs/art/social.png.source sha256 of the social.svg markup rendered into social.png
  * Run `npm run art` after changing the key design; test/art.test.ts fails if these are stale.
  */
-import { mkdirSync, realpathSync, writeFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
+import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { GLYPHS, type GlyphName } from "../src/render/glyphs";
 import { keySvg, markSvg, visualFor, type KeyKind } from "../src/render/key";
@@ -99,6 +103,7 @@ function keyCap(inner: string, ids: Ids, options: { hairline?: boolean; shadow?:
 const DEVICE_DEFS =
 	`<linearGradient id="body" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2E2E33"/><stop offset="1" stop-color="#1C1C20"/></linearGradient>` +
 	`<filter id="shadow" x="-20%" y="-20%" width="140%" height="160%"><feGaussianBlur stdDeviation="22"/></filter>`;
+const DEFAULT_CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 
 /**
  * A Stream Deck MK.2. `keyAt` returns each key's inner markup (the demo stacks an "off" and an
@@ -337,16 +342,53 @@ export function buildArt(): Record<string, string> {
 	return { "hero.svg": heroSvg(), "keys.svg": keysSvg(), "icon.svg": markSvg(), "social.svg": socialSvg(), "demo.svg": demoSvg() };
 }
 
+const sha256 = (markup: string) => createHash("sha256").update(markup).digest("hex");
+
+function renderSocialPng(out: string, socialSvgMarkup: string): void {
+	const sourcePath = out + "social.png.source";
+	const sourceHash = sha256(socialSvgMarkup);
+	const chrome = process.env.CHROME ?? DEFAULT_CHROME;
+
+	if (!existsSync(chrome)) {
+		const currentHash = existsSync(sourcePath) ? readFileSync(sourcePath, "utf8").trim() : "";
+		if (currentHash === sourceHash) {
+			console.warn(`social.png unchanged; Chrome not found at ${chrome}. Skipping PNG render.`);
+			return;
+		}
+		console.error(
+			`social.png is stale, but Chrome was not found at ${chrome}.\n` +
+				`Install Google Chrome there or set CHROME=/path/to/chrome, then run npm run art.`,
+		);
+		process.exit(1);
+	}
+
+	try {
+		execFileSync(
+			chrome,
+			[
+				"--headless=new",
+				"--disable-gpu",
+				"--hide-scrollbars",
+				"--force-device-scale-factor=1",
+				"--window-size=1280,640",
+				`--screenshot=${out}social.png`,
+				pathToFileURL(out + "social.svg").href,
+			],
+			{ stdio: ["ignore", "pipe", "pipe"] },
+		);
+	} catch (error) {
+		const stderr = error instanceof Error && "stderr" in error && Buffer.isBuffer(error.stderr) ? error.stderr.toString().trim() : "";
+		console.error(`Failed to render docs/art/social.png with Chrome.${stderr ? `\n${stderr}` : ""}`);
+		process.exit(1);
+	}
+	writeFileSync(sourcePath, `${sourceHash}\n`);
+}
+
 if (process.argv[1] !== undefined && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
 	const out = fileURLToPath(new URL("../docs/art/", import.meta.url));
 	mkdirSync(out, { recursive: true });
 	const art = buildArt();
 	for (const [name, markup] of Object.entries(art)) writeFileSync(out + name, markup);
-	try {
-		const { Resvg } = await import("@resvg/resvg-js");
-		writeFileSync(out + "social.png", new Resvg(art["social.svg"], { font: { loadSystemFonts: true } }).render().asPng());
-	} catch (error) {
-		console.warn(`social.png not rendered (${(error as Error).message}). Render docs/art/social.svg to a 1280×640 PNG another way.`);
-	}
+	renderSocialPng(out, art["social.svg"]);
 	console.log(`art: ${Object.keys(art).join(", ")}`);
 }
