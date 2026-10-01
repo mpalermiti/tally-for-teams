@@ -69,7 +69,7 @@
 			"Name": "Raise hand",
 			"UUID": "ai.michaelp.tally.hand",
 			"Icon": "imgs/actions/hand/icon",
-			"Tooltip": "Raise or lower your hand (through the React menu).",
+			"Tooltip": "Raise or lower your hand (through the React menu). Lit while your hand is up.",
 			"Controllers": [
 				"Keypad"
 			],
@@ -84,7 +84,7 @@
 			"Name": "Leave",
 			"UUID": "ai.michaelp.tally.leave",
 			"Icon": "imgs/actions/leave/icon",
-			"Tooltip": "Leave the meeting. Red while you are in one.",
+			"Tooltip": "Leave the meeting. Red while you're in one. Optionally only on a hold: see its settings.",
 			"Controllers": [
 				"Keypad"
 			],
@@ -116,7 +116,7 @@
 			"Name": "Chat",
 			"UUID": "ai.michaelp.tally.chat",
 			"Icon": "imgs/actions/chat/icon",
-			"Tooltip": "Open or close meeting chat. Lit when there are unread messages.",
+			"Tooltip": "Open or close meeting chat.",
 			"Controllers": [
 				"Keypad"
 			],

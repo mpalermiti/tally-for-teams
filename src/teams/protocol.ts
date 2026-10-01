@@ -45,7 +45,6 @@ export interface MeetingState {
 	isVideoOn: boolean;
 	isHandRaised: boolean;
 	isInMeeting: boolean;
-	isRecordingOn: boolean;
 	isSharing: boolean;
 	hasUnreadMessages: boolean;
 }
@@ -67,7 +66,6 @@ export const EMPTY_STATE: MeetingState = {
 	isVideoOn: false,
 	isHandRaised: false,
 	isInMeeting: false,
-	isRecordingOn: false,
 	isSharing: false,
 	hasUnreadMessages: false,
 };

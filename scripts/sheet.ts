@@ -10,7 +10,7 @@ const rows: [string, any, object?][] = [
 	["offline", OFFLINE_SNAPSHOT],
 	["no meeting", { online: true, state: EMPTY_STATE, permissions: NO_PERMISSIONS }],
 	["muted / off", meet({ isMuted: true })],
-	["live / on", meet({ isVideoOn: true, isHandRaised: true, hasUnreadMessages: true, isSharing: true, isRecordingOn: true })],
+	["live / on", meet({ isVideoOn: true, isHandRaised: true, isSharing: true })],
 ];
 const cell = 160, pad = 8, label = 150;
 let body = "";
@@ -28,7 +28,6 @@ const dialStates: [string, any][] = [
 	["no meeting", { online: true, state: EMPTY_STATE, permissions: NO_PERMISSIONS }],
 	["muted", meet({ isMuted: true })],
 	["live", meet()],
-	["live, recording", meet({ isRecordingOn: true })],
 ];
 const dialTop = rows.length * cell + 24;
 body += `<text x="10" y="${dialTop + 56}" fill="#999" font-family="Helvetica" font-size="18">mute dial</text>`;

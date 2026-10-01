@@ -1,7 +1,7 @@
 {
   "name": "tally-for-teams",
   "version": "1.0.0",
-  "description": "Stream Deck plugin for Microsoft Teams meeting controls, via the Teams local third-party app API.",
+  "description": "Microsoft Teams meeting controls for Stream Deck on Mac, through macOS Accessibility.",
   "scripts": {
     "build": "npm run build:bridge && rollup -c",
     "watch": "rollup -c -w --watch.onEnd=\"streamdeck restart ai.michaelp.tally\"",

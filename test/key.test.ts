@@ -66,13 +66,6 @@ describe("visualFor", () => {
 		expect(visualFor("share", inMeeting({ isSharing: true }, { canToggleShareTray: false })).tone).toBe("on");
 	});
 
-	it("flags recording on the mic and camera keys only", () => {
-		const recording = inMeeting({ isRecordingOn: true });
-		expect(visualFor("mute", recording).recording).toBe(true);
-		expect(visualFor("camera", recording).recording).toBe(true);
-		expect(visualFor("hand", recording).recording).toBe(false);
-		expect(visualFor("mute", inMeeting()).recording).toBe(false);
-	});
 });
 
 describe("keySvg", () => {
@@ -91,11 +84,10 @@ describe("keySvg", () => {
 		expect(stroke(keySvg(visualFor("hand", offline)))).not.toBe(ready);
 	});
 
-	it("renders a 144px square SVG with the glyph and, when recording, a badge", () => {
-		const svg = keySvg(visualFor("mute", inMeeting({ isRecordingOn: true })));
+	it("renders a 144px square SVG with the glyph", () => {
+		const svg = keySvg(visualFor("mute", inMeeting()));
 		expect(svg).toMatch(/^<svg[^>]+viewBox="0 0 144 144"/);
-		expect(svg).toContain('data-badge="recording"');
-		expect(keySvg(visualFor("mute", inMeeting()))).not.toContain("data-badge");
+		expect(svg).toContain('stroke="#1E1507"');
 	});
 
 	it("draws hold progress as a ring and a hint as a word under the glyph", () => {
@@ -112,10 +104,6 @@ describe("muteDialFeedback", () => {
 	it("says what the mic is doing and what holding will do", () => {
 		expect(text(muteDialFeedback(inMeeting({ isMuted: false })))).toEqual(["Live", "Hold to mute"]);
 		expect(text(muteDialFeedback(inMeeting({ isMuted: true })))).toEqual(["Muted", "Hold to talk"]);
-	});
-
-	it("puts recording ahead of the hint", () => {
-		expect(text(muteDialFeedback(inMeeting({ isRecordingOn: true })))).toEqual(["Live", "Recording"]);
 	});
 
 	it("explains why it's inactive", () => {

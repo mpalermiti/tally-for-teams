@@ -23,8 +23,6 @@ export type KeyKind = (typeof KEY_KINDS)[number];
 export interface Visual {
 	tone: Tone;
 	glyph: GlyphName;
-	/** Red dot: the meeting is being recorded. Shown only on mic and camera. */
-	recording: boolean;
 }
 
 export const OFFLINE_SNAPSHOT: Snapshot = { online: false, state: EMPTY_STATE, permissions: NO_PERMISSIONS };
@@ -41,7 +39,6 @@ const REACTION_GLYPHS: Record<Reaction, GlyphName> = {
 export function visualFor(kind: KeyKind, snapshot: Snapshot, options: { reaction?: Reaction } = {}): Visual {
 	const { online, state, permissions: can } = snapshot;
 	const live = online && state.isInMeeting;
-	const recording = live && state.isRecordingOn && (kind === "mute" || kind === "camera");
 
 	// [glyph when on/neutral, glyph when off, available now?, currently on?]
 	const spec: Record<KeyKind, [GlyphName, GlyphName, boolean, boolean | "action" | "danger"]> = {
@@ -62,11 +59,11 @@ export function visualFor(kind: KeyKind, snapshot: Snapshot, options: { reaction
 
 	const [onGlyph, offGlyph, available, current] = spec[kind];
 
-	if (!online) return { tone: "offline", glyph: onGlyph, recording };
-	if (!live || !available) return { tone: "idle", glyph: onGlyph, recording };
-	if (current === "danger") return { tone: "danger", glyph: onGlyph, recording };
-	if (current === "action") return { tone: "ready", glyph: onGlyph, recording };
-	return current ? { tone: "on", glyph: onGlyph, recording } : { tone: "off", glyph: offGlyph, recording };
+	if (!online) return { tone: "offline", glyph: onGlyph };
+	if (!live || !available) return { tone: "idle", glyph: onGlyph };
+	if (current === "danger") return { tone: "danger", glyph: onGlyph };
+	if (current === "action") return { tone: "ready", glyph: onGlyph };
+	return current ? { tone: "on", glyph: onGlyph } : { tone: "off", glyph: offGlyph };
 }
 
 // ── Drawing ────────────────────────────────────────────────────────────────
@@ -104,12 +101,6 @@ function background(tone: Tone, width: number, height: number): string {
 		`<defs><radialGradient id="g" cx="50%" cy="42%" r="75%"><stop offset="0" stop-color="${glow[0]}"/><stop offset="1" stop-color="${glow[1]}"/></radialGradient></defs>` +
 		`<rect width="${width}" height="${height}" fill="url(#g)"/>`
 	);
-}
-
-/** Red "being recorded" dot, ringed so it separates from the amber background as well as the dark ones. */
-function recordingBadge(visual: Visual, cx: number, cy: number): string {
-	if (!visual.recording) return "";
-	return `<circle data-badge="recording" cx="${cx}" cy="${cy}" r="9" fill="#FF3B30" stroke="${INK[visual.tone].bg}" stroke-width="3"/>`;
 }
 
 /** Temporary marks over a key: how far through a hold, or a one-word hint. */
@@ -155,7 +146,6 @@ export function keySvg(visual: Visual, overlay: KeyOverlay = {}): string {
 		SIZE,
 		background(visual.tone, SIZE, SIZE) +
 			glyphGroup(visual.glyph, ink, offset, offset, GLYPH_SIZE) +
-			recordingBadge(visual, 120, 24) +
 			(overlay.progress === undefined ? "" : progressRing(overlay.progress, ink)) +
 			(overlay.hint ? hintText(overlay.hint, ink) : ""),
 	);
@@ -202,7 +192,6 @@ export function muteDialFeedback(snapshot: Snapshot): DialFeedback {
 	const [label, detail] =
 		visual.tone === "offline" ? OFFLINE_TEXT[snapshot.reason ?? "starting"]
 		: visual.tone === "idle" ? ["Mic", state.isInMeeting ? "Not available" : "No meeting"]
-		: visual.recording ? [state.isMuted ? "Muted" : "Live", "Recording"]
 		: state.isMuted ? ["Muted", "Hold to talk"]
 		: ["Live", "Hold to mute"];
 
@@ -210,8 +199,7 @@ export function muteDialFeedback(snapshot: Snapshot): DialFeedback {
 		200,
 		100,
 		background(visual.tone, 200, 100) +
-			glyphGroup(visual.glyph, INK[visual.tone].glyph, 22, 24, 52) +
-			recordingBadge(visual, 182, 18),
+			glyphGroup(visual.glyph, INK[visual.tone].glyph, 22, 24, 52),
 	);
 
 	return {
