@@ -158,8 +158,8 @@ export function keyDataUrl(visual: Visual, overlay?: KeyOverlay): string {
 // ── Stream Deck+ touch strip (mute dial) ───────────────────────────────────
 //
 // Each dial owns a 200×100 slice of the strip. The face (background, glyph,
-// badge) is our SVG; the words are native text items from layouts/mute-dial.json,
-// so they use Stream Deck's own font rendering.
+// and overlays) is our SVG; the words are native text items from
+// layouts/mute-dial.json, so they use Stream Deck's own font rendering.
 
 /** Label and hint colours per tone; the hint sits one step quieter than the label. */
 const TEXT: Record<Tone, { label: string; detail: string }> = {

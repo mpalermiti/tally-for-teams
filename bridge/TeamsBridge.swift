@@ -235,9 +235,21 @@ func menu(_ id: String, itemIds: [String], labels: [String], req: Any?) {
 	}
 
 	guard let item else {
-		let offered = fresh.compactMap { domID($0) }.prefix(25).joined(separator: " | ")
+		let offeredIds = fresh.compactMap { domID($0) }
+		let withoutIDCount = fresh.count - offeredIds.count
+		let offeredList = offeredIds.prefix(25).joined(separator: " | ")
+		let offered: String
+		if fresh.isEmpty {
+			offered = "nothing"
+		} else if offeredList.isEmpty {
+			offered = "\(withoutIDCount) control\(withoutIDCount == 1 ? "" : "s") without id"
+		} else if withoutIDCount == 0 {
+			offered = offeredList
+		} else {
+			offered = "\(offeredList) (+\(withoutIDCount) without id)"
+		}
 		closeMenu(app, items: fresh, button: button)
-		return result(req, false, "No \(itemIds.first ?? labels.first ?? "item") in \(id) menu; it offered: \(offered.isEmpty ? "nothing" : offered)")
+		return result(req, false, "No \(itemIds.first ?? labels.first ?? "item") in \(id) menu; it offered: \(offered)")
 	}
 	let error = AXUIElementPerformAction(item, kAXPressAction as CFString)
 	let pressedLabel = label(item) ?? domID(item) ?? "item"
