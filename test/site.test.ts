@@ -40,4 +40,22 @@ describe("site", () => {
 	it("downloads the latest release", () => {
 		expect(html).toContain('href="https://github.com/mpalermiti/tally-for-teams/releases/latest/download/Tally.streamDeckPlugin"');
 	});
+
+	it("keeps the page neutral outside the key art", () => {
+		expect(css).not.toMatch(/--action|#0066cc|#0071e3/i);
+		expect(css).toMatch(/a\s*\{\s*color:\s*inherit;\s*text-decoration:\s*none;\s*\}/);
+		expect(css).toMatch(/a:hover\s*\{\s*text-decoration:\s*underline;\s*\}/);
+		expect(css).toMatch(/a:focus-visible\s*\{\s*outline:\s*2px solid #1d1d1f;\s*outline-offset:\s*3px;/);
+		expect(css).toMatch(/\.button\s*\{[^}]*background:\s*#1d1d1f;[^}]*color:\s*#fff;/s);
+		expect(css).toMatch(/\.button:hover\s*\{\s*background:\s*#000;\s*\}/);
+		expect(css).toMatch(/\.setup a\s*\{\s*text-decoration:\s*underline;\s*\}/);
+		expect(css).toMatch(/\.setup li::before\s*\{[^}]*background:\s*#1d1d1f;[^}]*color:\s*#fff;/s);
+	});
+
+	it("balances display copy to avoid lone words", () => {
+		expect(css).toMatch(/h1[^{]*\{[^}]*text-wrap:\s*balance;/s);
+		expect(css).toMatch(/\.lede\s*\{[^}]*text-wrap:\s*balance;/s);
+		expect(css).toMatch(/h2\s*\{[^}]*text-wrap:\s*balance;/s);
+		expect(css).toMatch(/\.why p, \.keys p, \.privacy p, \.caption, \.setup-note\s*\{[^}]*text-wrap:\s*balance;/s);
+	});
 });
