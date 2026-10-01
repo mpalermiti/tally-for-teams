@@ -35,14 +35,29 @@ npm run build           # compiles bin/teams-bridge (Swift) and bundles bin/plug
 npm run smoke           # end-to-end: the built plugin against a fake Stream Deck + scripted bridge
 npm run smoke:package   # package smoke: unzips the packed plugin and starts its real helper
 npm run watch           # rebuild + restart the plugin in Stream Deck on save
-npm run icons           # regenerate glyphs.ts and every PNG after design changes
+npm run icons           # regenerate glyphs.ts and the plugin's own icons/PNGs
 npm run sheet -- out.png   # render all keys in all states to one image
 ```
 
-`npm run art` regenerates the README and site art in `docs/art/` from the key renderer, including
-the link preview and favicon PNGs; a test fails if anything is stale. `docs/keys.png`
-(`npm run sheet -- docs/keys.png`) shows every key in every state. The site is plain HTML/CSS in
-`site/`; `.github/workflows/pages.yml` publishes it with `docs/art/` once the repo is public.
+`npm run art` regenerates the README and site art in `docs/art/` from the key renderer. It renders
+the PNGs (the social image and favicons) with Google Chrome at its default macOS path, or set
+`CHROME=/path/to/chrome`. Without Chrome, it still regenerates the SVGs and skips PNGs that are
+already current. A test fails if anything is stale. `docs/keys.png` (`npm run sheet -- docs/keys.png`)
+shows every key in every state. After key-design changes, run both `npm run icons` and `npm run art`.
+The site is plain HTML/CSS in `site/`; `.github/workflows/pages.yml` publishes it with `docs/art/`
+once the repo is public.
+
+### Publishing the site
+
+The site deploys from `.github/workflows/pages.yml` once the repo is public. Do this one time:
+
+1. Make the repo public.
+2. In Settings → Pages, set Source to GitHub Actions.
+3. In Actions → Pages, run the workflow. Making a repo public does not trigger it.
+4. In Settings → General → Social preview, upload `docs/art/social.png`. The repo page does not use the site's link-preview tags.
+5. Set the repo's Website to `https://mpalermiti.github.io/tally-for-teams/`.
+
+After that, pushes to `main` that touch `site/` or `docs/art/` redeploy.
 
 CI (`.github/workflows/build.yml`) builds, tests, and packs on pushes to `main`, pull requests, and version tags; Markdown-only changes are skipped. Pushing a tag `vX.Y.Z` matching `package.json` and `manifest.json`, checked by `npm run version:check`, publishes a GitHub Release with `Tally.streamDeckPlugin` attached.
 

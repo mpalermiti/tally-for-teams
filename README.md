@@ -4,7 +4,7 @@ Live Microsoft Teams controls for Stream Deck on Mac.
 
 <p align="center"><img src="docs/art/hero.svg" width="760" alt="A Stream Deck with Tally keys mid-meeting: mic and camera lit, Leave in red"></p>
 
-<p align="center"><b><a href="https://github.com/mpalermiti/tally-for-teams/releases/latest/download/Tally.streamDeckPlugin">Download Tally</a></b> · macOS 13+ · Stream Deck 7.1+ · the new Teams desktop app</p>
+<p align="center"><b><a href="https://github.com/mpalermiti/tally-for-teams/releases/latest/download/Tally.streamDeckPlugin">Download Tally</a></b> · macOS 13+ · Stream Deck 7.1+ · the new Teams desktop app, in English</p>
 
 **See it at a glance.** Keys light while your mic is live, your camera's on, your hand is up, or you're sharing, even when you change it in Teams itself.
 
@@ -47,7 +47,7 @@ On a **Stream Deck+**, put Mute on a dial: tap to toggle, hold to talk, turn rig
 ## Notes
 
 - **Privacy:** the helper reads meeting buttons (their labels, styling, and whether they're enabled) and items of menus it opens, never messages, chat, or window titles. It logs menu controls by id only. Menu items are matched only if they appeared after the plugin opened the menu, so a chat message's "Like" can never be pressed.
-- **Limits:** it can only use what Teams shows on screen, so it can't join meetings, set presence, or read your calendar. A Teams interface update can break a button until `selectors.ts` is updated.
+- **Limits:** it can only use what Teams shows on screen, so it can't join meetings, set presence, or read your calendar. A Teams interface update can break a button until `selectors.ts` is updated. Key states follow Teams' English labels, so other languages aren't supported yet.
 - **Glyphs:** from [Lucide](https://lucide.dev) (ISC; parts MIT); `wow` is custom on the same grid. License in [`ai.michaelp.tally.sdPlugin/lucide.LICENSE.txt`](ai.michaelp.tally.sdPlugin/lucide.LICENSE.txt).
 - **Settings pages:** use [sdpi-components](https://sdpi-components.dev) (MIT), which bundles [Lit](https://lit.dev) (BSD-3-Clause); both are shipped with the plugin, with their licenses in [`ai.michaelp.tally.sdPlugin/ui/sdpi-components.LICENSE.txt`](ai.michaelp.tally.sdPlugin/ui/sdpi-components.LICENSE.txt).
 - **Bundled code:** licenses for the npm packages bundled into the plugin are in [`ai.michaelp.tally.sdPlugin/third-party-licenses.txt`](ai.michaelp.tally.sdPlugin/third-party-licenses.txt).
