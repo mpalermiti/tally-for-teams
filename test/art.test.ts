@@ -20,6 +20,7 @@ describe("docs/art", () => {
 		const demo = buildArt()["demo.svg"];
 		expect(demo).toContain("@keyframes");
 		expect(demo).toContain("prefers-reduced-motion");
+		expect(demo).toContain('<g class="a t3" opacity="1">');
 		expect(Buffer.byteLength(demo)).toBeLessThan(150_000);
 		expect(demo).not.toContain('id="g"');
 	});
