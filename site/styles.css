@@ -1,0 +1,65 @@
+:root {
+	--ink: #1d1d1f;
+	--ink-2: #6e6e73;
+	--paper: #f5f5f7;
+	--line: #d2d2d7;
+	--action: #0066cc;
+	--action-focus: #0071e3;
+	--text: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Helvetica, Arial, sans-serif;
+	--display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", Helvetica, Arial, sans-serif;
+}
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: #fff; color: var(--ink); font: 17px/1.47 var(--text); letter-spacing: -0.022em; -webkit-font-smoothing: antialiased; }
+img { display: block; max-width: 100%; height: auto; margin: 0 auto; }
+a { color: var(--action); }
+a:focus-visible { outline: 2px solid var(--action-focus); outline-offset: 3px; border-radius: 4px; }
+
+.hero { max-width: 1080px; margin: 0 auto; padding: 80px 24px 0; text-align: center; }
+.eyebrow { margin: 0 0 8px; color: var(--ink-2); font: 600 21px/1.19 var(--display); letter-spacing: .011em; }
+h1 { margin: 0; font: 600 clamp(48px, 7vw, 64px)/1.07 var(--display); letter-spacing: -0.015em; }
+.lede { max-width: 640px; margin: 16px auto 0; font: 400 clamp(21px, 2.6vw, 28px)/1.14 var(--display); letter-spacing: .007em; }
+.actions { display: flex; flex-wrap: wrap; gap: 18px 24px; justify-content: center; align-items: center; margin: 32px 0 0; }
+.button { padding: 11px 22px; border-radius: 9999px; background: var(--action); color: #fff; font-weight: 400; text-decoration: none; }
+.button:hover { background: var(--action-focus); }
+.button:active { transform: scale(.95); }
+.more { text-decoration: none; }
+.more::after { content: " ›"; }
+.more:hover { text-decoration: underline; }
+.fineprint { margin: 16px 0 0; color: var(--ink-2); font-size: 14px; letter-spacing: -0.016em; }
+.hero-art { width: min(100%, 980px); margin-top: 56px; }
+
+main section { max-width: 980px; margin: 0 auto; padding: 80px 24px 0; }
+h2 { margin: 0 0 32px; text-align: center; font: 600 clamp(34px, 5vw, 40px)/1.1 var(--display); letter-spacing: -0.01em; }
+.why p, .keys p, .privacy p, .caption, .setup-note { max-width: 680px; margin: 0 auto; text-align: center; color: var(--ink-2); font-size: 21px; line-height: 1.38; letter-spacing: .011em; }
+.why strong { color: var(--ink); }
+.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
+.grid article { padding: 24px; border-radius: 18px; background: var(--paper); }
+.grid svg { width: 32px; height: 32px; fill: none; stroke: var(--ink); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.grid h3 { margin: 16px 0 8px; font: 600 24px/1.17 var(--display); letter-spacing: .009em; }
+.grid p { margin: 0; color: var(--ink-2); }
+.demo img { border-radius: 18px; }
+.caption { margin-top: 20px; font-size: 17px; }
+.keys img { margin-bottom: 32px; }
+.setup ol { display: grid; gap: 20px; max-width: 680px; margin: 0 auto; padding: 0; list-style: none; counter-reset: step; }
+.setup li { display: grid; grid-template-columns: 36px 1fr; gap: 16px; align-items: start; font-size: 19px; counter-increment: step; }
+.setup li::before { content: counter(step); display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; background: var(--action); color: #fff; font-size: 15px; font-weight: 600; }
+.setup-note { margin-top: 20px; font-size: 17px; line-height: 1.47; letter-spacing: -0.022em; }
+
+footer { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 24px; max-width: 980px; margin: 80px auto 0; padding: 20px 24px 48px; border-top: 1px solid var(--line); color: var(--ink-2); font-size: 12px; }
+footer p { margin: 0; }
+
+@media (max-width: 734px) {
+	.hero { padding-top: 56px; }
+	main section { padding-top: 72px; }
+	.grid { grid-template-columns: 1fr; }
+	footer { display: block; text-align: center; }
+	footer p + p { margin-top: 10px; }
+}
+
+@media (max-width: 420px) {
+	.hero, main section { padding-left: 18px; padding-right: 18px; }
+	.actions { gap: 16px; }
+	.setup li { grid-template-columns: 32px 1fr; gap: 12px; font-size: 17px; }
+}

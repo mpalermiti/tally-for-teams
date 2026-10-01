@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Tally for Teams · Live Teams controls for Stream Deck on Mac</title>
+	<meta name="description" content="Live Microsoft Teams controls for Stream Deck on Mac. A lit key means it's live.">
+	<link rel="canonical" href="https://mpalermiti.github.io/tally-for-teams/">
+	<meta property="og:type" content="website">
+	<meta property="og:title" content="Tally for Teams">
+	<meta property="og:description" content="Live Microsoft Teams controls for Stream Deck on Mac. A lit key means it's live.">
+	<meta property="og:url" content="https://mpalermiti.github.io/tally-for-teams/">
+	<meta property="og:image" content="https://mpalermiti.github.io/tally-for-teams/art/social.png">
+	<meta name="twitter:card" content="summary_large_image">
+	<link rel="icon" href="art/icon.svg" type="image/svg+xml">
+	<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+	<header class="hero">
+		<p class="eyebrow">For Stream Deck on Mac</p>
+		<h1>Tally for Teams</h1>
+		<p class="lede">Live Microsoft Teams controls. A lit key means it's live.</p>
+		<p class="actions">
+			<a class="button" href="https://github.com/mpalermiti/tally-for-teams/releases/latest/download/Tally.streamDeckPlugin">Download</a>
+			<a class="more" href="https://github.com/mpalermiti/tally-for-teams">View on GitHub</a>
+		</p>
+		<p class="fineprint">Free and open source · macOS 13+ · Stream Deck 7.1+ · the new Teams desktop app</p>
+		<img class="hero-art" src="art/hero.svg" width="1400" height="900" alt="A Stream Deck with Tally keys mid-meeting: mic and camera lit, Leave in red">
+	</header>
+
+	<main>
+		<section class="why">
+			<p><strong>Why “Tally”?</strong> On a TV set, the tally light is the small red lamp on a camera that tells everyone it's live. Tally puts that light on your Stream Deck: a lit key means that thing is live — your mic, your camera, your raised hand, your shared screen.</p>
+		</section>
+
+		<section class="values" aria-labelledby="values-title">
+			<h2 id="values-title">Made for meetings.</h2>
+			<div class="grid">
+				<article>
+					<svg viewBox="0 0 24 24" aria-hidden="true">
+						<path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0" />
+						<circle cx="12" cy="12" r="3" />
+					</svg>
+					<h3>See it at a glance.</h3>
+					<p>Keys light while your mic is live, your camera's on, your hand is up, or you're sharing, even when you change it in Teams itself.</p>
+				</article>
+				<article>
+					<svg viewBox="0 0 24 24" aria-hidden="true">
+						<rect x="2" y="4" width="20" height="16" rx="2" />
+						<path d="M10 4v4" />
+						<path d="M2 8h20" />
+						<path d="M6 4v4" />
+					</svg>
+					<h3>Stays out of your way.</h3>
+					<p>Works with Teams in the background and never pulls it to the front.</p>
+				</article>
+				<article>
+					<svg viewBox="0 0 24 24" aria-hidden="true">
+						<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z" />
+						<path d="m9 12 2 2 4-4" />
+					</svg>
+					<h3>No accidental hang-ups.</h3>
+					<p>Turn on Hold to leave, and a tap on Leave can't end your meeting.</p>
+				</article>
+				<article>
+					<svg viewBox="0 0 24 24" aria-hidden="true">
+						<rect width="18" height="11" x="3" y="11" rx="2" ry="2" />
+						<path d="M7 11V7a5 5 0 0 1 10 0v4" />
+					</svg>
+					<h3>Private by design.</h3>
+					<p>Runs entirely on your Mac. No account, no cloud. It reads only Teams' meeting buttons.</p>
+				</article>
+			</div>
+		</section>
+
+		<section class="demo" aria-labelledby="demo-title">
+			<h2 id="demo-title">Always in step with Teams.</h2>
+			<img src="art/demo.svg" width="1360" height="480" alt="Pressing Mute on the Stream Deck lights the key and unmutes Teams; raising your hand in Teams lights the hand key; pressing Share lights the Share key">
+			<p class="caption">Press a key and Teams follows. Change something in Teams and the key follows.</p>
+		</section>
+
+		<section class="keys" aria-labelledby="keys-title">
+			<h2 id="keys-title">Seven keys. One rule.</h2>
+			<img src="art/keys.svg" width="1344" height="196" alt="The seven Tally keys: Mute, Camera, Raise hand, Share, Chat, React and Leave">
+			<p>Amber means it's live: your mic, camera, raised hand or shared screen. Leave turns red during a meeting. Keys dim when there's nothing to do.</p>
+		</section>
+
+		<section class="setup" aria-labelledby="setup-title">
+			<h2 id="setup-title">Set up in a minute.</h2>
+			<ol>
+				<li><span><a href="https://github.com/mpalermiti/tally-for-teams/releases/latest/download/Tally.streamDeckPlugin">Download Tally</a> and double-click it.</span></li>
+				<li><span>Drag the keys you want from <b>Tally for Teams</b> onto your Stream Deck.</span></li>
+				<li><span>Press any Tally key, then allow <b>Stream Deck</b> in System Settings → Privacy &amp; Security → Accessibility.</span></li>
+			</ol>
+			<p class="setup-note">For Leave, consider turning on <i>Hold to leave</i> in its settings. In a Multi Action, Leave still acts at once.</p>
+		</section>
+
+		<section class="privacy" aria-labelledby="privacy-title">
+			<h2 id="privacy-title">Private by design.</h2>
+			<p>Tally runs entirely on your Mac. It reads Teams' meeting buttons the way a screen reader does, and never messages, chat or window titles. No account, no cloud, and this page doesn't track you either.</p>
+		</section>
+	</main>
+
+	<footer>
+		<p><a href="https://github.com/mpalermiti/tally-for-teams">GitHub</a> · <a href="https://github.com/mpalermiti/tally-for-teams/blob/main/LICENSE">MIT License</a> · Icons from Lucide (ISC).</p>
+		<p>Not affiliated with or endorsed by Microsoft or Elgato. Microsoft Teams is a trademark of Microsoft Corporation.</p>
+	</footer>
+</body>
+</html>
