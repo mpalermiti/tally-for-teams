@@ -9,7 +9,7 @@
     "typecheck": "tsc --noEmit",
     "icons": "node --import tsx scripts/icons.ts",
     "link": "streamdeck link ai.michaelp.tally.sdPlugin",
-    "pack": "npm run build && streamdeck pack ai.michaelp.tally.sdPlugin --force",
+    "pack": "npm run build && mkdir -p dist && streamdeck pack ai.michaelp.tally.sdPlugin --force --output dist",
     "smoke": "node scripts/smoke.mjs",
     "sheet": "node --import tsx scripts/sheet.ts",
     "build:bridge": "sh scripts/build-bridge.sh",

@@ -29,10 +29,7 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - name: Pack
-        run: |
-          npm run pack
-          mkdir -p dist
-          mv ai.michaelp.tally.streamDeckPlugin dist/
+        run: npm run pack
       - name: Validate manifest
         run: npx streamdeck validate ai.michaelp.tally.sdPlugin
       - name: Helper runs on both architectures

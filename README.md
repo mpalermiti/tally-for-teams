@@ -83,7 +83,7 @@ Build from source:
 
 ```bash
 npm install
-npm run pack                    # builds ai.michaelp.tally.streamDeckPlugin; double-click to install
+npm run pack                    # builds dist/ai.michaelp.tally.streamDeckPlugin; double-click to install
 npm run build && npm run link    # development install; needs the Elgato CLI: npm i -g @elgato/cli
 ```
 
