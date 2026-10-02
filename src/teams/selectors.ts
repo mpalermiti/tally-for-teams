@@ -37,6 +37,10 @@ export interface SelectorConfig {
 	handItem: MenuItemSelector;
 	meetingMarkerIds: readonly string[];
 	indicatorContainerIds: readonly string[];
+	recording: {
+		ids: readonly string[];
+		labels: string;
+	};
 	labelPatterns: {
 		mute: { muted: string; live: string };
 		camera: { on: string; off: string };
@@ -45,7 +49,11 @@ export interface SelectorConfig {
 	};
 }
 
-export interface Selectors extends Omit<SelectorConfig, "labelPatterns"> {
+export interface Selectors extends Omit<SelectorConfig, "labelPatterns" | "recording"> {
+	recording: {
+		ids: readonly string[];
+		labels: RegExp;
+	};
 	labelPatterns: {
 		mute: { muted: RegExp; live: RegExp };
 		camera: { on: RegExp; off: RegExp };
@@ -80,6 +88,10 @@ export const DEFAULT_SELECTORS = {
 	handItem: { id: "raisehands-button", labels: ["raise", "lower"] },
 	meetingMarkerIds: ["horizontalMiddleEnd", "horizontalEnd"],
 	indicatorContainerIds: ["indicators"],
+	recording: {
+		ids: ["record"],
+		labels: "record|transcri",
+	},
 	labelPatterns: {
 		mute: { muted: "^unmute", live: "^mute" },
 		camera: { on: "\\boff\\b", off: "\\bon\\b" },
@@ -185,6 +197,7 @@ export function snapshotFrom(status: BridgeStatus, selectors: Selectors = DEFAUL
 			isSharingKnown: sharing !== undefined,
 			isSharing: sharing ?? false,
 			hasUnreadMessages: chat !== undefined && unreadPattern !== null && unreadPattern.test(chat),
+			isRecording: isRecording(status, selectors),
 		},
 		permissions: {
 			...NO_PERMISSIONS,
@@ -306,6 +319,15 @@ export function commandFor(
 	}
 }
 
+function isRecording(status: BridgeStatus, selectors: Selectors): boolean {
+	const idParts = selectors.recording.ids.map((id) => id.toLowerCase()).filter(Boolean);
+	return (status.indicators ?? []).some((indicator) => {
+		const id = indicator.id?.toLowerCase() ?? "";
+		if (idParts.some((part) => id.includes(part))) return true;
+		return indicator.label !== undefined && selectors.recording.labels.test(indicator.label);
+	});
+}
+
 function matchKnown(label: string | undefined, truePattern: RegExp, falsePattern: RegExp): boolean | undefined {
 	if (label === undefined) return undefined;
 	if (truePattern.test(label)) return true;
@@ -326,6 +348,10 @@ function compileSelectors(config: SelectorConfig, defaults: SelectorConfig, prob
 		handItem: config.handItem,
 		meetingMarkerIds: config.meetingMarkerIds,
 		indicatorContainerIds: config.indicatorContainerIds,
+		recording: {
+			ids: config.recording.ids,
+			labels: compilePattern(config.recording.labels, defaults.recording.labels, "recording.labels", problems),
+		},
 		labelPatterns: {
 			mute: {
 				muted: compilePattern(config.labelPatterns.mute.muted, defaults.labelPatterns.mute.muted, "labelPatterns.mute.muted", problems),

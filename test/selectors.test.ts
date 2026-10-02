@@ -48,6 +48,23 @@ describe("snapshotFrom", () => {
 		expect(live.state).toMatchObject({ isMuted: false, isVideoOn: true });
 	});
 
+	it("reads recording from indicator labels and ids", () => {
+		expect(
+			snapshotFrom(
+				status(toolbar, {
+					indicators: [{ id: "call-recording-pill", role: "AXButton", label: "Recording" }],
+				}),
+			).state.isRecording,
+		).toBe(true);
+		expect(
+			snapshotFrom(
+				status(toolbar, {
+					indicators: [{ id: "call-duration-custom", role: "AXTimeGroup", label: "Elapsed time 00:34" }],
+				}),
+			).state.isRecording,
+		).toBe(false);
+	});
+
 	it("marks mic, camera, and share state unknown when labels do not match their patterns", () => {
 		const unknown = snapshotFrom(
 			status({

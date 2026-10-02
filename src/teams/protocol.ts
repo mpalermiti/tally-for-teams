@@ -50,6 +50,7 @@ export interface MeetingState {
 	isSharing: boolean;
 	isSharingKnown: boolean;
 	hasUnreadMessages: boolean;
+	isRecording: boolean;
 }
 
 export interface MeetingPermissions {
@@ -74,6 +75,7 @@ export const EMPTY_STATE: MeetingState = {
 	isSharing: false,
 	isSharingKnown: true,
 	hasUnreadMessages: false,
+	isRecording: false,
 };
 
 export const NO_PERMISSIONS: MeetingPermissions = {
