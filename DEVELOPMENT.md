@@ -114,11 +114,13 @@ reads the `call-duration-custom` indicator label and parses the first `MM:SS` or
 The People key presses `buttonIds.people` (default `roster-button`). Background blur presses the
 `buttonIds.blur` menu host (default `video-button-configure`) and sends both configured `blur.on`
 and `blur.off` targets to the bridge. The bridge chooses while the Teams menu is open: if the blur
-item is selected it presses off, otherwise it presses blur, including when another background effect
-is selected. The built-in on-label defaults prefer `standard blur` before the broader `blur`; off
-defaults are `no background effect` / `none`. If Teams exposes no selected state at all, the bridge
-uses meeting-scoped fallback memory and resets it when the meeting or Teams process ends. The key
-stays neutral unless a reliable status-time blur state is added. When Teams still looks like a meeting but the
+item is selected it presses `blur.off`; if `blur.off` is still missing after one more poll tick, the
+request fails instead of pressing blur again. Only the matched `blur.on` and `blur.off` items decide
+whether selected state is readable; unrelated menu controls and readable-but-unselected matched
+items fall back to meeting-scoped memory. The built-in on-label defaults prefer `standard blur`
+before the broader `blur`; off defaults are `no background effect` / `none`. Fallback memory resets
+when the meeting or Teams/helper process ends, not on a transient toolbar miss. The key stays neutral
+unless a reliable status-time blur state is added. When Teams still looks like a meeting but the
 mic anchor is missing, Tally reports "Teams changed" and the plugin log lists the control ids it saw
 in that Teams window, capped for readability. It never logs labels or window titles.
 
