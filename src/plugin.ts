@@ -55,11 +55,13 @@ for (const key of keys) streamDeck.actions.registerAction(key);
 
 type GlobalSettings = { autoSwitchProfile?: boolean };
 
-let autoSwitchProfile = false;
+let autoSwitchProfile: boolean | undefined;
 let profileSwitchState: ProfileSwitchState = INITIAL_PROFILE_SWITCH_STATE;
+let profileSwitchRecheckTimer: ReturnType<typeof setTimeout> | undefined;
 
 function applyGlobalSettings(settings: GlobalSettings): void {
 	autoSwitchProfile = settings.autoSwitchProfile === true;
+	void syncMeetingProfile(teams.snapshot);
 }
 
 streamDeck.settings.onDidReceiveGlobalSettings<GlobalSettings>((ev) => applyGlobalSettings(ev.settings));
@@ -82,6 +84,7 @@ function hasVisibleTallyActions(device: { actions: Iterable<{ manifestId: string
 }
 
 async function syncMeetingProfile(snapshot: Snapshot): Promise<void> {
+	clearProfileSwitchRecheck();
 	const result = nextProfileSwitch(profileSwitchState, {
 		autoSwitchProfile,
 		meetingStatus: meetingStatusForProfileSwitch(snapshot),
@@ -89,6 +92,7 @@ async function syncMeetingProfile(snapshot: Snapshot): Promise<void> {
 		devices: connectedProfileDevices(),
 	});
 	profileSwitchState = result.state;
+	scheduleProfileSwitchRecheck(result.recheckInMs);
 	for (const action of result.actions) {
 		try {
 			await streamDeck.profiles.switchToProfile(action.deviceId, action.profileName);
@@ -96,6 +100,20 @@ async function syncMeetingProfile(snapshot: Snapshot): Promise<void> {
 			streamDeck.logger.warn(`profiles: couldn't switch ${action.deviceId}: ${(error as Error).message}`);
 		}
 	}
+}
+
+function clearProfileSwitchRecheck(): void {
+	if (!profileSwitchRecheckTimer) return;
+	clearTimeout(profileSwitchRecheckTimer);
+	profileSwitchRecheckTimer = undefined;
+}
+
+function scheduleProfileSwitchRecheck(delayMs: number | undefined): void {
+	if (delayMs === undefined) return;
+	profileSwitchRecheckTimer = setTimeout(() => {
+		profileSwitchRecheckTimer = undefined;
+		void syncMeetingProfile(teams.snapshot);
+	}, delayMs);
 }
 
 let lastReason: string | undefined = "starting";

@@ -335,7 +335,7 @@ try {
 	check(profileSwitches().at(-1).payload.profile === "profiles/Tally (Stream Deck +)", "…using the bundled Stream Deck + profile name");
 	buttons = {};
 	status();
-	await until(() => profileSwitches().length === 2, "profile auto-switch returns to the previous profile on meeting end");
+	await until(() => profileSwitches().length === 2, "profile auto-switch returns to the previous profile on meeting end", 12_000);
 	check(profileSwitches().at(-1).payload.profile === undefined, "…by omitting the profile name");
 
 	// With Hold to leave on, a tap never leaves while Teams is readable, even with the key dimmed.

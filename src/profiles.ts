@@ -22,7 +22,7 @@ export interface ProfileSwitchState {
 export type ProfileMeetingStatus = "in-meeting" | "not-in-meeting" | "unknown";
 
 export interface ProfileSwitchInput {
-	autoSwitchProfile: boolean;
+	autoSwitchProfile: boolean | undefined;
 	meetingStatus: ProfileMeetingStatus;
 	nowMs: number;
 	devices: readonly ProfileSwitchDevice[];
@@ -33,6 +33,12 @@ export interface ProfileSwitchAction {
 	deviceId: string;
 	/** Omitted to return to the previous profile. */
 	profileName?: string;
+}
+
+export interface ProfileSwitchResult {
+	state: ProfileSwitchState;
+	actions: ProfileSwitchAction[];
+	recheckInMs?: number;
 }
 
 export const INITIAL_PROFILE_SWITCH_STATE: ProfileSwitchState = { isInMeeting: false, switchedDeviceIds: [] };
@@ -49,12 +55,16 @@ export function meetingStatusForProfileSwitch(snapshot: Snapshot): ProfileMeetin
 export function nextProfileSwitch(
 	previous: ProfileSwitchState,
 	input: ProfileSwitchInput,
-): { state: ProfileSwitchState; actions: ProfileSwitchAction[] } {
+): ProfileSwitchResult {
 	const supported = input.devices
 		.map((device) => ({ device, profileName: profileNameForDeviceType(device.type) }))
 		.filter((entry): entry is { device: ProfileSwitchDevice; profileName: string } => entry.profileName !== undefined);
 
-	if (!input.autoSwitchProfile) {
+	if (input.autoSwitchProfile === undefined) {
+		return { state: previous, actions: [] };
+	}
+
+	if (input.autoSwitchProfile === false) {
 		return {
 			state: {
 				isInMeeting:
@@ -81,8 +91,9 @@ export function nextProfileSwitch(
 	if (!previous.isInMeeting) return { state: { isInMeeting: false, switchedDeviceIds: [] }, actions: [] };
 
 	const notInMeetingSinceMs = previous.notInMeetingSinceMs ?? input.nowMs;
-	if (input.nowMs - notInMeetingSinceMs < (input.switchBackDelayMs ?? PROFILE_SWITCH_BACK_DELAY_MS)) {
-		return { state: { ...previous, notInMeetingSinceMs }, actions: [] };
+	const recheckInMs = (input.switchBackDelayMs ?? PROFILE_SWITCH_BACK_DELAY_MS) - (input.nowMs - notInMeetingSinceMs);
+	if (recheckInMs > 0) {
+		return { state: { ...previous, notInMeetingSinceMs }, actions: [], recheckInMs };
 	}
 
 	const previouslySwitched = new Set(previous.switchedDeviceIds);

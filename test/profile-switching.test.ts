@@ -45,6 +45,29 @@ describe("profile auto-switch decisions", () => {
 		expect(result.state).toEqual({ isInMeeting: true, switchedDeviceIds: ["SD15", "PLUS"] });
 	});
 
+	it("does not mark an active meeting as handled while global settings are still loading", () => {
+		const loading = nextProfileSwitch(INITIAL_PROFILE_SWITCH_STATE, {
+			autoSwitchProfile: undefined,
+			meetingStatus: "in-meeting",
+			nowMs: 0,
+			devices,
+		});
+
+		expect(loading.actions).toEqual([]);
+		expect(loading.state).toEqual(INITIAL_PROFILE_SWITCH_STATE);
+
+		const settingsArrived = nextProfileSwitch(loading.state, {
+			autoSwitchProfile: true,
+			meetingStatus: "in-meeting",
+			nowMs: 1_000,
+			devices,
+		});
+		expect(settingsArrived.actions).toEqual([
+			{ deviceId: "SD15", profileName: "profiles/Tally (Stream Deck)" },
+			{ deviceId: "PLUS", profileName: "profiles/Tally (Stream Deck +)" },
+		]);
+	});
+
 	it("does not switch repeatedly while the meeting remains active", () => {
 		const state: ProfileSwitchState = { isInMeeting: true, switchedDeviceIds: ["PLUS"] };
 
@@ -61,6 +84,7 @@ describe("profile auto-switch decisions", () => {
 
 		expect(blip.actions).toEqual([]);
 		expect(blip.state).toEqual({ ...afterSwitch, notInMeetingSinceMs: 1_000 });
+		expect(blip.recheckInMs).toBe(PROFILE_SWITCH_BACK_DELAY_MS);
 
 		const recovered = nextProfileSwitch(blip.state, {
 			autoSwitchProfile: true,
@@ -99,6 +123,7 @@ describe("profile auto-switch decisions", () => {
 
 		expect(firstNoMeeting.actions).toEqual([]);
 		expect(almostElapsed.actions).toEqual([]);
+		expect(almostElapsed.recheckInMs).toBe(1);
 		expect(almostElapsed.state).toEqual({ ...afterSwitch, notInMeetingSinceMs: 3_000 });
 	});
 
