@@ -91,7 +91,8 @@ export const DEFAULT_SELECTORS = {
 	indicatorContainerIds: ["indicators"],
 	recording: {
 		ids: ["record"],
-		labels: "^(?!.*\\b(start|stop(ped)?|not|no|disabled|off|paused|ended)\\b).*\\b(recording|recorded|transcribing|transcription)\\b",
+		labels:
+			"^(?![\\s\\S]*\\b(stop(ped)?|not|no|disabled|off|paused|ended)\\b)(?!\\s*start\\b)[\\s\\S]*\\b(recording|recorded|transcribing|transcription)\\b",
 	},
 	labelPatterns: {
 		mute: { muted: "^unmute", live: "^mute" },

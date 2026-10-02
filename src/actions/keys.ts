@@ -16,7 +16,7 @@ import { muteDialFeedback, timerDataUrl, type Tone } from "../render/key";
 import type { RequestResult, Snapshot } from "../teams/protocol";
 import { HOLD_TO_LEAVE_MS, HoldToConfirm, HoldToggle, RotateToggle, shouldHoldMuteKey, shouldHoldToLeave } from "./gestures";
 import { TeamsKey, type KeySettings } from "./teams-key";
-import { MeetingTimer } from "./timer";
+import { KeyedMeetingTimers } from "./timer";
 
 // One class per key: Stream Deck identifies actions by UUID, and each UUID needs its own decorated class.
 // UUIDs must match ai.michaelp.tally.sdPlugin/manifest.json.
@@ -268,7 +268,7 @@ export class PeopleKey extends TeamsKey {
 @action({ UUID: "ai.michaelp.tally.timer" })
 export class TimerKey extends SingletonAction<KeySettings> {
 	#drawn = new Map<string, string>();
-	#clocks = new Map<string, MeetingTimer>();
+	#clocks = new KeyedMeetingTimers();
 	#timers = new Map<string, ReturnType<typeof setInterval>>();
 
 	constructor(private readonly teams: { snapshot: Snapshot }) {
@@ -282,6 +282,7 @@ export class TimerKey extends SingletonAction<KeySettings> {
 
 	override onWillDisappear(ev: WillDisappearEvent<KeySettings>): void {
 		this.#stop(ev.action.id);
+		this.#clocks.delete(ev.action.id);
 		this.#drawn.delete(ev.action.id);
 	}
 
@@ -313,20 +314,12 @@ export class TimerKey extends SingletonAction<KeySettings> {
 			return;
 		}
 
-		const seconds = this.#clock(action.id).update({
+		const seconds = this.#clocks.update(action.id, {
 			isInMeeting: true,
 			elapsedSeconds: snapshot.state.meetingElapsedSeconds,
 		});
 		if (seconds !== undefined) this.#start(action);
 		await this.#draw(action, seconds, "ready");
-	}
-
-	#clock(id: string): MeetingTimer {
-		const existing = this.#clocks.get(id);
-		if (existing) return existing;
-		const clock = new MeetingTimer();
-		this.#clocks.set(id, clock);
-		return clock;
 	}
 
 	#start(action: KeyAction<KeySettings>): void {
@@ -341,7 +334,7 @@ export class TimerKey extends SingletonAction<KeySettings> {
 	}
 
 	#drawRunning(action: KeyAction<KeySettings>): Promise<void> {
-		return this.#draw(action, this.#clocks.get(action.id)?.currentSeconds(), "ready");
+		return this.#draw(action, this.#clocks.currentSeconds(action.id), "ready");
 	}
 
 	async #draw(action: KeyAction<KeySettings>, seconds: number | undefined, tone: Tone): Promise<void> {

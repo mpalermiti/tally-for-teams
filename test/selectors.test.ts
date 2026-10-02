@@ -51,10 +51,10 @@ describe("snapshotFrom", () => {
 	});
 
 	it("reads recording only from positive indicator labels or labeled recording ids", () => {
-		for (const label of ["Recording", "Recording and transcribing", "This meeting is being recorded"]) {
+		for (const label of ["Recording", "Recording and transcribing", "This meeting is being recorded", "Recording has started", "Transcription started"]) {
 			expect(snapshotFrom(status(toolbar, { indicators: [{ role: "AXStaticText", label }] })).state.isRecording).toBe(true);
 		}
-		for (const label of ["Start recording", "Recording stopped", "Not recording", "Recording disabled", "No transcript"]) {
+		for (const label of ["Start recording", "Recording stopped", "Recording\nStopped", "Not recording", "Recording disabled", "No transcript"]) {
 			expect(snapshotFrom(status(toolbar, { indicators: [{ role: "AXStaticText", label }] })).state.isRecording).toBe(false);
 		}
 		expect(
@@ -71,6 +71,15 @@ describe("snapshotFrom", () => {
 				}),
 			).state.isRecording,
 		).toBe(true);
+		for (const label of ["Recording stopped", "Off"]) {
+			expect(
+				snapshotFrom(
+					status(toolbar, {
+						indicators: [{ id: "call-recording-pill", role: "AXButton", label }],
+					}),
+				).state.isRecording,
+			).toBe(false);
+		}
 		expect(
 			snapshotFrom(
 				status(toolbar, {

@@ -163,6 +163,7 @@ var meetingMarkerControlIDs: [String] = []
 var lastDiscovery = Date.distantPast
 var lastStatus = ""
 var promptedThisSession = false
+var indicatorFastRediscoverySpent = false
 
 func teamsApp() -> NSRunningApplication? {
 	NSWorkspace.shared.runningApplications.first { bundleIDs.contains($0.bundleIdentifier ?? "") }
@@ -281,17 +282,25 @@ func poll() {
 			meetingMarkers = []
 			meetingMarkerControlIDs = []
 			lastDiscovery = .distantPast
+			indicatorFastRediscoverySpent = false
 		}
 		if let app = axApp {
 			buttons = readButtons()
 			let since = Date().timeIntervalSince(lastDiscovery)
 			// Rediscover (throttled) when the toolbar vanished or any watched button went stale:
-			// Teams rebuilds the toolbar when sharing starts and swaps in the compact view. Also
-			// every 10 s in a meeting, to catch buttons moving in or out of the "More" overflow.
-			let stale = buttons[anchorID] == nil || buttons.count < cache.count || (buttons[anchorID] != nil && indicatorContainersStale())
-			if (stale && since > 2) || since > 10 {
+			// Teams rebuilds the toolbar when sharing starts and swaps in the compact view. A
+			// previously found indicator container gets one fast recovery scan; if it stays
+			// missing, fall back to the 10 s cadence instead of rescanning every 2 s.
+			let toolbarStale = buttons[anchorID] == nil || buttons.count < cache.count
+			let indicatorsWentStale = buttons[anchorID] != nil && !indicatorContainers.isEmpty && indicatorContainersStale()
+			let quickIndicatorRecovery = indicatorsWentStale && !indicatorFastRediscoverySpent
+			if ((toolbarStale || quickIndicatorRecovery) && since > 2) || since > 10 {
 				discover(app)
 				buttons = readButtons()
+				if quickIndicatorRecovery && since <= 10 { indicatorFastRediscoverySpent = indicatorContainersStale() }
+			}
+			if buttons[anchorID] != nil && !indicatorContainers.isEmpty && !indicatorContainersStale() {
+				indicatorFastRediscoverySpent = false
 			}
 			indicators = readIndicators()
 			if buttons[anchorID] == nil {
@@ -306,6 +315,7 @@ func poll() {
 		indicatorContainers = [:]
 		meetingMarkers = []
 		meetingMarkerControlIDs = []
+		indicatorFastRediscoverySpent = false
 	}
 
 	let status: [String: Any] = [
@@ -434,6 +444,7 @@ func handle(_ line: String) {
 		meetingMarkers = []
 		meetingMarkerControlIDs = []
 		lastDiscovery = .distantPast
+		indicatorFastRediscoverySpent = false
 		lastStatus = ""
 		poll()
 	case "press":
