@@ -6,6 +6,15 @@ import { KEY_KINDS } from "../src/render/key";
 
 const manifest = JSON.parse(readFileSync(new URL("../ai.michaelp.tally.sdPlugin/manifest.json", import.meta.url), "utf8"));
 const uuids: string[] = manifest.Actions.map((a: { UUID: string }) => a.UUID);
+const pluginRoot = new URL("../ai.michaelp.tally.sdPlugin/", import.meta.url);
+
+function existingImage(ref: string): string | undefined {
+	for (const ext of [".svg", ".png"]) {
+		const path = fileURLToPath(new URL(`${ref}${ext}`, pluginRoot));
+		if (existsSync(path)) return path;
+	}
+	return undefined;
+}
 
 describe("manifest", () => {
 	it("is Tally for Teams", () => {
@@ -24,6 +33,33 @@ describe("manifest", () => {
 	it("gives Leave a settings page", () => {
 		const leave = manifest.Actions.find((a: { UUID: string }) => a.UUID === "ai.michaelp.tally.leave");
 		expect(leave.PropertyInspectorPath).toBe("ui/leave.html");
+	});
+
+	it("resolves every manifest image path to a shipped SVG or PNG", () => {
+		const refs = [
+			manifest.Icon,
+			manifest.CategoryIcon,
+			...manifest.Actions.flatMap((action: { Icon?: string; States?: { Image?: string }[]; Encoder?: { Icon?: string; background?: string } }) => [
+				action.Icon,
+				...(action.States ?? []).map((state) => state.Image),
+				action.Encoder?.Icon,
+				action.Encoder?.background,
+			]),
+		].filter(Boolean) as string[];
+
+		for (const ref of refs) expect(existingImage(ref), ref).toBeDefined();
+	});
+
+	it("uses SVGs, not PNGs, for action-list icons and default key images", () => {
+		for (const action of manifest.Actions as { Icon: string; States?: { Image?: string }[]; Encoder?: { Icon?: string; background?: string } }[]) {
+			const refs = [action.Icon, ...(action.States ?? []).map((state) => state.Image), action.Encoder?.Icon, action.Encoder?.background].filter(
+				Boolean,
+			) as string[];
+			for (const ref of refs) {
+				expect(existsSync(fileURLToPath(new URL(`${ref}.svg`, pluginRoot))), ref).toBe(true);
+				expect(existsSync(fileURLToPath(new URL(`${ref}.png`, pluginRoot))), ref).toBe(false);
+			}
+		}
 	});
 
 	it("keeps every settings page working offline", () => {
