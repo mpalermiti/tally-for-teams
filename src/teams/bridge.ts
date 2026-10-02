@@ -66,6 +66,8 @@ export class TeamsBridge extends EventEmitter<{ change: [Snapshot] }> {
 	#running = false;
 	#attempt = 0;
 	#restartTimer: NodeJS.Timeout | undefined;
+	#teamsChangedTimer: NodeJS.Timeout | undefined;
+	#lastStatus: BridgeStatus | undefined;
 	#nextRequestId = 1;
 	#pending = new Map<number, Pending>();
 	#lastTeamsChangedLogSignature = "";
@@ -96,6 +98,7 @@ export class TeamsBridge extends EventEmitter<{ change: [Snapshot] }> {
 	stop(): void {
 		this.#running = false;
 		clearTimeout(this.#restartTimer);
+		this.#clearTeamsChangedTimer();
 		const process = this.#process;
 		this.#process = undefined;
 		process?.kill();
@@ -160,9 +163,11 @@ export class TeamsBridge extends EventEmitter<{ change: [Snapshot] }> {
 		if (message.type === "status") {
 			this.#attempt = 0;
 			const status = message as BridgeStatus;
+			this.#lastStatus = status;
 			const snapshot = this.#teamsChanged.next(status, this.#selectors);
 			this.#maybeLogTeamsChanged(status, snapshot);
 			this.#publish(snapshot);
+			this.#syncTeamsChangedTimer(snapshot);
 		} else if (message.type === "result" && typeof message.req === "number") {
 			const pending = this.#pending.get(message.req);
 			if (!pending) return;
@@ -172,6 +177,34 @@ export class TeamsBridge extends EventEmitter<{ change: [Snapshot] }> {
 		} else if (message.type === "log" && message.message) {
 			this.#options.log?.(message.message);
 		}
+	}
+
+	#syncTeamsChangedTimer(snapshot: Snapshot): void {
+		if (snapshot.reason === "teams-changed") {
+			this.#clearTeamsChangedTimer();
+			return;
+		}
+		const delayMs = this.#teamsChanged.pendingDelayMs();
+		if (delayMs === undefined) {
+			this.#clearTeamsChangedTimer();
+			return;
+		}
+		this.#clearTeamsChangedTimer();
+		this.#teamsChangedTimer = setTimeout(() => this.#fireTeamsChangedTimer(), delayMs);
+	}
+
+	#fireTeamsChangedTimer(): void {
+		this.#teamsChangedTimer = undefined;
+		if (!this.#lastStatus) return;
+		const snapshot = this.#teamsChanged.next(this.#lastStatus, this.#selectors);
+		this.#maybeLogTeamsChanged(this.#lastStatus, snapshot);
+		this.#publish(snapshot);
+		this.#syncTeamsChangedTimer(snapshot);
+	}
+
+	#clearTeamsChangedTimer(): void {
+		clearTimeout(this.#teamsChangedTimer);
+		this.#teamsChangedTimer = undefined;
 	}
 
 	#maybeLogTeamsChanged(status: BridgeStatus, snapshot: Snapshot): void {
@@ -202,6 +235,8 @@ export class TeamsBridge extends EventEmitter<{ change: [Snapshot] }> {
 
 	/** Meeting state is unknowable without the helper, so forget it rather than show stale keys. */
 	#reset(): void {
+		this.#clearTeamsChangedTimer();
+		this.#lastStatus = undefined;
 		for (const { resolve, timer } of this.#pending.values()) {
 			clearTimeout(timer);
 			resolve({ ok: false, message: "Lost contact with Teams" });

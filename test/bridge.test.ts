@@ -1,6 +1,6 @@
 import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { TeamsBridge, type BridgeProcess } from "../src/teams/bridge";
 import type { Snapshot } from "../src/teams/protocol";
@@ -49,9 +49,9 @@ async function until(predicate: () => boolean, timeoutMs = 2000): Promise<void> 
 	}
 }
 
-function clock(start = 1_000) {
-	let t = start;
-	return { now: () => t, advance: (ms: number) => (t += ms) };
+async function flushStatus(): Promise<void> {
+	await Promise.resolve();
+	await Promise.resolve();
 }
 
 describe("TeamsBridge", () => {
@@ -78,7 +78,10 @@ describe("TeamsBridge", () => {
 		bridge.start();
 	}
 
-	afterEach(() => bridge?.stop());
+	afterEach(() => {
+		bridge?.stop();
+		vi.useRealTimers();
+	});
 
 	it("starts offline, then tells the helper which buttons to watch", async () => {
 		start();
@@ -178,32 +181,75 @@ describe("TeamsBridge", () => {
 		expect(logs).toContain("menu offered: Like | Heart");
 	});
 
-	it("logs a teams-changed id dump only after debounce, once per marker/id set", async () => {
-		const c = clock();
+	it("publishes teams-changed from one marker-only status after the debounce timer", async () => {
+		vi.useFakeTimers();
 		const logs: string[] = [];
-		start({ now: c.now, log: (m) => logs.push(m) });
+		start({ now: () => Date.now(), log: (m) => logs.push(m) });
 		latest().status({ [BUTTON_IDS.mute]: "Mute mic" });
-		await until(() => bridge.snapshot.online);
+		await flushStatus();
+		expect(bridge.snapshot.state).toMatchObject({ isInMeeting: true, isMuted: false });
 
 		const changed = {
 			markers: ["hangup-button", "horizontalEnd"],
 			markerControlIds: ["hangup-button", "share-button"],
 		};
-		c.advance(500);
 		latest().status({ "hangup-button": "Leave" }, changed);
-		await new Promise((r) => setTimeout(r, 20));
+		await flushStatus();
+		expect(bridge.snapshot.reason).toBeUndefined();
+		expect(bridge.snapshot.state).toMatchObject({ isInMeeting: true, isMuted: false });
+		expect(vi.getTimerCount()).toBe(1);
 		expect(logs.filter((m) => m.includes("teams-changed markers"))).toEqual([]);
 
-		c.advance(3_000);
-		latest().status({ "hangup-button": "Leave" }, changed);
-		await until(() => logs.some((m) => m.includes("teams-changed markers")));
+		await vi.advanceTimersByTimeAsync(2_999);
+		expect(bridge.snapshot.reason).toBeUndefined();
+
+		await vi.advanceTimersByTimeAsync(1);
+		expect(bridge.snapshot.reason).toBe("teams-changed");
 		expect(logs.filter((m) => m.includes("teams-changed markers"))).toEqual([
 			"teams-changed markers: hangup-button | horizontalEnd; control ids: hangup-button | share-button",
 		]);
 
-		latest().status({ "hangup-button": "Leave" }, changed);
-		await new Promise((r) => setTimeout(r, 20));
+		await vi.advanceTimersByTimeAsync(5_000);
 		expect(logs.filter((m) => m.includes("teams-changed markers"))).toHaveLength(1);
+	});
+
+	it("cancels a pending teams-changed timer when a normal status arrives", async () => {
+		vi.useFakeTimers();
+		const logs: string[] = [];
+		start({ now: () => Date.now(), log: (m) => logs.push(m) });
+		latest().status({ [BUTTON_IDS.mute]: "Mute mic" });
+		await flushStatus();
+
+		latest().status({ "hangup-button": "Leave" }, { markers: ["hangup-button", "horizontalEnd"], markerControlIds: ["hangup-button"] });
+		await flushStatus();
+		expect(vi.getTimerCount()).toBe(1);
+
+		await vi.advanceTimersByTimeAsync(1_500);
+		latest().status({ [BUTTON_IDS.mute]: "Mute mic" });
+		await flushStatus();
+		expect(bridge.snapshot.state.isInMeeting).toBe(true);
+		expect(bridge.snapshot.reason).toBeUndefined();
+		expect(vi.getTimerCount()).toBe(0);
+
+		await vi.advanceTimersByTimeAsync(3_000);
+		expect(bridge.snapshot.reason).toBeUndefined();
+		expect(logs.filter((m) => m.includes("teams-changed markers"))).toEqual([]);
+	});
+
+	it("clears a pending teams-changed timer on stop", async () => {
+		vi.useFakeTimers();
+		const logs: string[] = [];
+		start({ now: () => Date.now(), log: (m) => logs.push(m) });
+		latest().status({ [BUTTON_IDS.mute]: "Mute mic" });
+		await flushStatus();
+		latest().status({ "hangup-button": "Leave" }, { markers: ["hangup-button", "horizontalEnd"], markerControlIds: ["hangup-button"] });
+		await flushStatus();
+		expect(vi.getTimerCount()).toBe(1);
+
+		bridge.stop();
+		expect(vi.getTimerCount()).toBe(0);
+		await vi.advanceTimersByTimeAsync(3_000);
+		expect(logs.filter((m) => m.includes("teams-changed markers"))).toEqual([]);
 	});
 
 	it("stops the helper and doesn't restart it", async () => {

@@ -31,6 +31,10 @@ const toolbar = {
 };
 
 describe("snapshotFrom", () => {
+	it("uses only meeting-only marker ids by default", () => {
+		expect(DEFAULT_SELECTORS.meetingMarkerIds).toEqual(["horizontalMiddleEnd", "horizontalEnd"]);
+	});
+
 	it("reads mute and camera state from the button labels", () => {
 		const muted = snapshotFrom(status(toolbar));
 		expect(muted.online).toBe(true);

@@ -77,7 +77,7 @@ export const DEFAULT_SELECTORS = {
 		wow: { id: "surprised-button", labels: ["surprised", "wow"] },
 	},
 	handItem: { id: "raisehands-button", labels: ["raise", "lower"] },
-	meetingMarkerIds: ["horizontalMiddleEnd", "horizontalEnd", "indicators"],
+	meetingMarkerIds: ["horizontalMiddleEnd", "horizontalEnd"],
 	labelPatterns: {
 		mute: { muted: "^unmute", live: "^mute" },
 		camera: { on: "\\boff\\b", off: "\\bon\\b" },
@@ -206,6 +206,11 @@ export class TeamsChangedDebouncer {
 		this.#pendingSince = undefined;
 		this.#pendingSignature = "";
 		this.#lastStable = undefined;
+	}
+
+	pendingDelayMs(): number | undefined {
+		if (this.#pendingSince === undefined) return undefined;
+		return Math.max(0, this.debounceMs - (this.now() - this.#pendingSince));
 	}
 
 	next(status: BridgeStatus, selectors: Selectors = DEFAULT_ACTIVE_SELECTORS): Snapshot {
