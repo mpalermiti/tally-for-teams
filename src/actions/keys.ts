@@ -1,5 +1,6 @@
 import {
 	action,
+	SingletonAction,
 	type DialDownEvent,
 	type DialRotateEvent,
 	type DialUpEvent,
@@ -7,10 +8,11 @@ import {
 	type KeyDownEvent,
 	type KeyUpEvent,
 	type TouchTapEvent,
+	type WillAppearEvent,
 	type WillDisappearEvent,
 } from "@elgato/streamdeck";
 
-import { muteDialFeedback } from "../render/key";
+import { muteDialFeedback, timerDataUrl, type Tone } from "../render/key";
 import type { RequestResult, Snapshot } from "../teams/protocol";
 import { HOLD_TO_LEAVE_MS, HoldToConfirm, HoldToggle, RotateToggle, shouldHoldMuteKey, shouldHoldToLeave } from "./gestures";
 import { TeamsKey, type KeySettings } from "./teams-key";
@@ -254,4 +256,86 @@ export class ShareKey extends TeamsKey {
 		this.teams.snapshot.state.isSharing
 			? this.teams.request("stop-sharing")
 			: this.teams.request("toggle-ui", { type: "sharing-tray" });
+}
+
+@action({ UUID: "ai.michaelp.tally.timer" })
+export class TimerKey extends SingletonAction<KeySettings> {
+	#drawn = new Map<string, string>();
+	#starts = new Map<string, number>();
+	#timers = new Map<string, ReturnType<typeof setInterval>>();
+
+	constructor(private readonly teams: { snapshot: Snapshot }) {
+		super();
+	}
+
+	override onWillAppear(ev: WillAppearEvent<KeySettings>): Promise<void> {
+		this.#drawn.delete(ev.action.id);
+		return ev.action.isKey() ? this.#sync(ev.action) : Promise.resolve();
+	}
+
+	override onWillDisappear(ev: WillDisappearEvent<KeySettings>): void {
+		this.#stop(ev.action.id);
+		this.#drawn.delete(ev.action.id);
+	}
+
+	override onKeyDown(_ev: KeyDownEvent<KeySettings>): Promise<void> {
+		return Promise.resolve();
+	}
+
+	async refresh(): Promise<void> {
+		const draws: Promise<void>[] = [];
+		this.actions.forEach((action) => {
+			if (action.isKey()) draws.push(this.#sync(action));
+		});
+		await Promise.all(draws);
+	}
+
+	async #sync(action: KeyAction<KeySettings>): Promise<void> {
+		const snapshot = this.teams.snapshot;
+		if (!snapshot.online) {
+			this.#stop(action.id);
+			this.#starts.delete(action.id);
+			await this.#draw(action, undefined, "offline");
+			return;
+		}
+
+		const parsed = snapshot.state.meetingElapsedSeconds;
+		if (!snapshot.state.isInMeeting || parsed === undefined) {
+			this.#stop(action.id);
+			this.#starts.delete(action.id);
+			await this.#draw(action, undefined, "idle");
+			return;
+		}
+
+		const now = Date.now();
+		const nextStart = now - parsed * 1000;
+		const currentStart = this.#starts.get(action.id);
+		if (currentStart === undefined || Math.abs(currentStart - nextStart) >= 2_000) this.#starts.set(action.id, nextStart);
+		this.#start(action);
+		await this.#drawRunning(action);
+	}
+
+	#start(action: KeyAction<KeySettings>): void {
+		if (this.#timers.has(action.id)) return;
+		this.#timers.set(action.id, setInterval(() => void this.#drawRunning(action), 1_000));
+	}
+
+	#stop(id: string): void {
+		const timer = this.#timers.get(id);
+		if (timer) clearInterval(timer);
+		this.#timers.delete(id);
+	}
+
+	#drawRunning(action: KeyAction<KeySettings>): Promise<void> {
+		const start = this.#starts.get(action.id);
+		const seconds = start === undefined ? undefined : Math.max(0, Math.floor((Date.now() - start) / 1000));
+		return this.#draw(action, seconds, "ready");
+	}
+
+	async #draw(action: KeyAction<KeySettings>, seconds: number | undefined, tone: Tone): Promise<void> {
+		const image = timerDataUrl(seconds, tone);
+		if (this.#drawn.get(action.id) === image) return;
+		this.#drawn.set(action.id, image);
+		await action.setImage(image);
+	}
 }

@@ -17,7 +17,7 @@ import { GLYPHS, type GlyphName } from "./glyphs";
  */
 export type Tone = "offline" | "idle" | "off" | "ready" | "on" | "danger";
 
-export const KEY_KINDS = ["mute", "camera", "hand", "leave", "react", "chat", "share"] as const;
+export const KEY_KINDS = ["mute", "camera", "hand", "leave", "react", "chat", "share", "timer"] as const;
 export type KeyKind = (typeof KEY_KINDS)[number];
 
 export interface Visual {
@@ -63,6 +63,7 @@ export function visualFor(kind: KeyKind, snapshot: Snapshot, options: { reaction
 			can.canToggleShareTray || (state.isSharing && can.canStopSharing),
 			state.isSharingKnown ? state.isSharing || "action" : "action",
 		],
+		timer: ["timer", "timer", false, "action"],
 	};
 
 	const [onGlyph, offGlyph, available, current] = spec[kind];
@@ -168,6 +169,33 @@ export function keySvg(visual: Visual, overlay: KeyOverlay = {}): string {
 
 export function keyDataUrl(visual: Visual, overlay?: KeyOverlay): string {
 	return dataUrl(keySvg(visual, overlay));
+}
+
+export function formatTimerSeconds(seconds: number): string {
+	const whole = Math.max(0, Math.floor(seconds));
+	const h = Math.floor(whole / 3600);
+	const m = Math.floor((whole % 3600) / 60);
+	const s = whole % 60;
+	return h > 0 ? `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}` : `${m}:${String(s).padStart(2, "0")}`;
+}
+
+/** A 144×144 custom face for the meeting timer key. */
+export function timerFace(seconds: number | undefined, tone: Tone): string {
+	const ink = INK[tone].glyph;
+	const text = seconds === undefined ? "—" : formatTimerSeconds(seconds);
+	const fontSize = text.length > 5 ? 32 : 40;
+	return svg(
+		SIZE,
+		SIZE,
+		background(tone, SIZE, SIZE) +
+			glyphGroup("timer", ink, 18, 18, 28) +
+			`<text x="${SIZE / 2}" y="88" text-anchor="middle" font-family="-apple-system, Helvetica, sans-serif" ` +
+			`font-size="${fontSize}" font-weight="700" font-variant-numeric="tabular-nums" fill="${ink}">${escapeXml(text)}</text>`,
+	);
+}
+
+export function timerDataUrl(seconds: number | undefined, tone: Tone): string {
+	return dataUrl(timerFace(seconds, tone));
 }
 
 // ── Stream Deck+ touch strip (mute dial) ───────────────────────────────────

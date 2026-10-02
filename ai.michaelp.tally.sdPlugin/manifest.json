@@ -141,6 +141,21 @@
 					"ShowTitle": false
 				}
 			]
+		},
+		{
+			"Name": "Meeting timer",
+			"UUID": "ai.michaelp.tally.timer",
+			"Icon": "imgs/actions/timer/icon",
+			"Tooltip": "How long you've been in the meeting.",
+			"Controllers": [
+				"Keypad"
+			],
+			"States": [
+				{
+					"Image": "imgs/actions/timer/key",
+					"ShowTitle": false
+				}
+			]
 		}
 	]
 }

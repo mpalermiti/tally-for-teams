@@ -3,7 +3,7 @@ import { chmodSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { CameraKey, ChatKey, HandKey, LeaveKey, MuteKey, ReactKey, ShareKey } from "./actions/keys";
+import { CameraKey, ChatKey, HandKey, LeaveKey, MuteKey, ReactKey, ShareKey, TimerKey } from "./actions/keys";
 import { TeamsBridge } from "./teams/bridge";
 import { loadSelectors } from "./teams/selectors-loader";
 
@@ -38,6 +38,7 @@ const keys = [
 	new ReactKey(teams),
 	new ChatKey(teams),
 	new ShareKey(teams),
+	new TimerKey(teams),
 ];
 for (const key of keys) streamDeck.actions.registerAction(key);
 

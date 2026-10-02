@@ -51,6 +51,8 @@ export interface MeetingState {
 	isSharingKnown: boolean;
 	hasUnreadMessages: boolean;
 	isRecording: boolean;
+	/** Seconds parsed from Teams' call-duration indicator, if present in the selected meeting window. */
+	meetingElapsedSeconds?: number;
 }
 
 export interface MeetingPermissions {

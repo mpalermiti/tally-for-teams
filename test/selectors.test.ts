@@ -6,6 +6,7 @@ import {
 	TeamsChangedDebouncer,
 	commandFor,
 	mergeSelectors,
+	parseMeetingDurationSeconds,
 	snapshotFrom,
 	type BridgeStatus,
 } from "../src/teams/selectors";
@@ -63,6 +64,16 @@ describe("snapshotFrom", () => {
 				}),
 			).state.isRecording,
 		).toBe(false);
+	});
+
+	it("reads meeting duration from the call-duration indicator", () => {
+		expect(
+			snapshotFrom(
+				status(toolbar, {
+					indicators: [{ id: "call-duration-custom", role: "AXTimeGroup", label: "Elapsed time 01:05" }],
+				}),
+			).state.meetingElapsedSeconds,
+		).toBe(65);
 	});
 
 	it("marks mic, camera, and share state unknown when labels do not match their patterns", () => {
@@ -130,6 +141,14 @@ describe("snapshotFrom", () => {
 	it("goes offline with a reason when Teams can't be read", () => {
 		expect(snapshotFrom(status({}, { trusted: false }))).toMatchObject({ online: false, reason: "no-permission" });
 		expect(snapshotFrom(status({}, { running: false }))).toMatchObject({ online: false, reason: "teams-not-running" });
+	});
+});
+
+describe("parseMeetingDurationSeconds", () => {
+	it("parses the first language-independent timer in an indicator label", () => {
+		expect(parseMeetingDurationSeconds("Elapsed time 00:34")).toBe(34);
+		expect(parseMeetingDurationSeconds("Durée écoulée 1:02:03")).toBe(3_723);
+		expect(parseMeetingDurationSeconds("garbage")).toBeUndefined();
 	});
 });
 

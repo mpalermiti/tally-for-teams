@@ -198,6 +198,7 @@ export function snapshotFrom(status: BridgeStatus, selectors: Selectors = DEFAUL
 			isSharing: sharing ?? false,
 			hasUnreadMessages: chat !== undefined && unreadPattern !== null && unreadPattern.test(chat),
 			isRecording: isRecording(status, selectors),
+			meetingElapsedSeconds: meetingElapsedSeconds(status),
 		},
 		permissions: {
 			...NO_PERMISSIONS,
@@ -317,6 +318,18 @@ export function commandFor(
 		case "query-state":
 			return { unsupported: "Not needed: the bridge reports state continuously" };
 	}
+}
+
+export function parseMeetingDurationSeconds(label: string): number | undefined {
+	const match = /\d{1,2}:\d{2}(?::\d{2})?/.exec(label);
+	if (!match) return undefined;
+	const parts = match[0].split(":").map((part) => Number(part));
+	return parts.length === 2 ? parts[0] * 60 + parts[1] : parts[0] * 3600 + parts[1] * 60 + parts[2];
+}
+
+function meetingElapsedSeconds(status: BridgeStatus): number | undefined {
+	const indicator = (status.indicators ?? []).find((item) => item.id === "call-duration-custom" && item.label !== undefined);
+	return indicator?.label === undefined ? undefined : parseMeetingDurationSeconds(indicator.label);
 }
 
 function isRecording(status: BridgeStatus, selectors: Selectors): boolean {

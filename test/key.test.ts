@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { Snapshot } from "../src/teams/protocol";
 import { EMPTY_STATE, NO_PERMISSIONS, type MeetingPermissions, type MeetingState } from "../src/teams/protocol";
-import { KEY_KINDS, keySvg, muteDialFeedback, visualFor } from "../src/render/key";
+import { KEY_KINDS, keySvg, muteDialFeedback, timerFace, visualFor } from "../src/render/key";
 
 const ALL_ALLOWED = Object.fromEntries(Object.keys(NO_PERMISSIONS).map((k) => [k, true])) as unknown as MeetingPermissions;
 
@@ -125,6 +125,20 @@ describe("keySvg", () => {
 		expect(keySvg(leave)).not.toContain("data-progress");
 		expect(keySvg(leave, { progress: 0.5 })).toContain('data-progress="0.50"');
 		expect(keySvg(leave, { hint: "Hold" })).toContain(">Hold</text>");
+	});
+});
+
+describe("timerFace", () => {
+	it("formats meeting duration as minutes, then hours", () => {
+		expect(timerFace(34, "ready")).toContain(">0:34<");
+		expect(timerFace(754, "ready")).toContain(">12:34<");
+		expect(timerFace(3_723, "ready")).toContain(">1:02:03<");
+	});
+
+	it("draws a neutral dash when no meeting timer is available", () => {
+		const face = timerFace(undefined, "idle");
+		expect(face).toContain(">—<");
+		expect(face).toContain('font-variant-numeric="tabular-nums"');
 	});
 });
 
