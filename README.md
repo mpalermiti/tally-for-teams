@@ -14,9 +14,9 @@ Live Microsoft Teams controls for Stream Deck on Mac.
 
 **No accidental hang-ups.** Turn on *Hold to leave* and a tap can't end your meeting.
 
-**One-click setup.** Stream Deck offers a ready-made Tally profile when you install.
+**One-click setup.** Stream Deck offers a ready-made Tally profile for Stream Deck and Stream Deck + when you install.
 
-**Private by design.** Runs entirely on your Mac. No account, no cloud. It reads only Teams' meeting buttons.
+**Private by design.** Runs entirely on your Mac. No account, no cloud. It reads only Teams' meeting controls and status.
 
 <p align="center"><img src="docs/art/demo.svg" width="760" alt="Pressing Mute on the Stream Deck lights the key and unmutes Teams; raising your hand in Teams lights the hand key; pressing Share lights the Share key"></p>
 
@@ -33,7 +33,7 @@ Live Microsoft Teams controls for Stream Deck on Mac.
 | Chat | open or close meeting chat | — |
 | React | send Like, Love, Applause, Laugh or Wow (pick in its settings) | — |
 | People | open or close the participant list | — |
-| Background blur | blur or unblur your background | while blur is on, when Teams exposes a reliable state |
+| Background blur | blur or unblur your background | — |
 | Meeting timer | glance at elapsed meeting time | shows time in the meeting |
 | Leave | leave the meeting; optionally only when held | red during a meeting |
 
@@ -47,7 +47,7 @@ On a **Stream Deck+**, put Mute on a dial: tap to toggle, hold to talk, turn rig
 2. Accept the bundled **Tally (Stream Deck)** or **Tally (Stream Deck +)** profile, or drag the keys you want from **Tally for Teams**. For Leave, consider turning on *Hold to leave* in its settings. (In a Multi Action, Leave still acts at once.)
 3. Press any Tally key. macOS asks to let **Stream Deck** control your computer: turn it on in System Settings → Privacy & Security → Accessibility. (Teams no longer offers a control API, so Tally works the way a screen reader does.) Until it's on, keys stay dark and a Stream Deck+ dial says *Allow / Accessibility*.
 
-Optional: in any Tally key's settings, turn on *Switch to the Tally profile during meetings*. Tally switches to the bundled profile when a meeting starts and switches back after it ends.
+Optional: on Stream Deck or Stream Deck +, in any Tally key's settings, turn on *Switch to the Tally profile during meetings*. Tally switches to the bundled profile when a meeting starts and switches back after it ends.
 
 **Updating:** download the latest release and double-click it; your keys stay put. To hear about new versions, watch this repo → Custom → Releases.
 
@@ -55,8 +55,8 @@ Optional: in any Tally key's settings, turn on *Switch to the Tally profile duri
 
 ## Notes
 
-- **Privacy:** the helper reads meeting buttons (their labels, styling, and whether they're enabled) and items of menus it opens, never messages, chat, or window titles. It logs menu controls by id only. Menu items are matched only if they appeared after the plugin opened the menu, so a chat message's "Like" can never be pressed.
-- **Limits:** it can only use what Teams shows on screen, so it can't join meetings, set presence, or read your calendar. Full state follows Teams' English labels. In other languages, keys still press controls, but state may stay neutral until selectors are updated.
+- **Privacy:** the helper reads meeting buttons (their labels, styling, and whether they're enabled), the meeting's status (recording, elapsed time), and items of menus it opens, the way a screen reader does. It never reads messages, chat, or window titles. It logs menu controls by id only. Menu items are matched only if they appeared after the plugin opened the menu, so a chat message's "Like" can never be pressed.
+- **Limits:** it can only use what Teams shows on screen, so it can't join meetings, set presence, or read your calendar. In other languages, Mute, Camera, Raise hand, React, Share, Chat, People, and Leave still press by web id. Mute tap toggles, and holding Mute still ends where it started. Lit state, Background blur, and the Stream Deck + dial need English Teams or a [`selectors.json`](DEVELOPMENT.md#fixing-tally-when-teams-changes) override.
 - **Glyphs:** from [Lucide](https://lucide.dev) (ISC; parts MIT); `wow` is custom on the same grid. License in [`ai.michaelp.tally.sdPlugin/lucide.LICENSE.txt`](ai.michaelp.tally.sdPlugin/lucide.LICENSE.txt).
 - **Settings pages:** use [sdpi-components](https://sdpi-components.dev) (MIT), which bundles [Lit](https://lit.dev) (BSD-3-Clause); both are shipped with the plugin, with their licenses in [`ai.michaelp.tally.sdPlugin/ui/sdpi-components.LICENSE.txt`](ai.michaelp.tally.sdPlugin/ui/sdpi-components.LICENSE.txt).
 - **Bundled code:** licenses for the npm packages bundled into the plugin are in [`ai.michaelp.tally.sdPlugin/third-party-licenses.txt`](ai.michaelp.tally.sdPlugin/third-party-licenses.txt).
