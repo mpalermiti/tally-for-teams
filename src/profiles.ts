@@ -131,7 +131,7 @@ export function nextProfileSwitch(
 	return { state: { isInMeeting: false, switchedDeviceIds: [] }, actions };
 }
 
-const REQUIRED_VISIBLE_ACTIONS_BY_DEVICE_TYPE = {
+export const REQUIRED_VISIBLE_ACTIONS_BY_DEVICE_TYPE = {
 	0: [
 		{ manifestId: `${PLUGIN_UUID}.mute`, controllerType: "Keypad", coordinates: { column: 0, row: 0 } },
 		{ manifestId: `${PLUGIN_UUID}.leave`, controllerType: "Keypad", coordinates: { column: 4, row: 2 } },

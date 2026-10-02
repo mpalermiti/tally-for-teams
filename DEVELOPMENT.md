@@ -152,9 +152,10 @@ inspector. When enabled, the plugin switches connected DeviceType 0 and 7 device
 bundled profile immediately on a no-meeting → in-meeting transition. It switches back only after
 Stream Deck has reported a readable no-meeting state for about eight seconds; offline, helper restart,
 and "Teams changed" states are treated as unknown and never start that timer. On meeting end it calls
-`switchToProfile(deviceId)` without a profile name only for devices it moved that still have visible
-Tally actions, which avoids pulling the user away from a profile they selected manually. If the
-setting is off, Tally never sends `switchToProfile`.
+`switchToProfile(deviceId)` without a profile name only for devices it moved that still have the
+bundled Mute and Leave keys visible at their bundled positions. Users who move either key will not be
+switched back automatically, which avoids pulling them away from a profile they selected manually. If
+the setting is off, Tally never sends `switchToProfile`.
 
 ### Releasing
 

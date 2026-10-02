@@ -3,14 +3,17 @@ import { describe, expect, it } from "vitest";
 import {
 	INITIAL_PROFILE_SWITCH_STATE,
 	PROFILE_SWITCH_BACK_DELAY_MS,
+	REQUIRED_VISIBLE_ACTIONS_BY_DEVICE_TYPE,
 	meetingStatusForProfileSwitch,
 	nextProfileSwitch,
 	type ProfileSwitchState,
+	type ProfileSwitchVisibleAction,
 } from "../src/profiles";
+import { PROFILES } from "../scripts/profiles";
 import { EMPTY_STATE, NO_PERMISSIONS, type Snapshot } from "../src/teams/protocol";
 
 describe("profile auto-switch decisions", () => {
-	const bundledVisibleActionsByDeviceType = {
+	const bundledVisibleActionsByDeviceType: Record<number, readonly ProfileSwitchVisibleAction[]> = {
 		0: [
 			{ manifestId: "ai.michaelp.tally.mute", controllerType: "Keypad", coordinates: { column: 0, row: 0 } },
 			{ manifestId: "ai.michaelp.tally.leave", controllerType: "Keypad", coordinates: { column: 4, row: 2 } },
@@ -20,12 +23,20 @@ describe("profile auto-switch decisions", () => {
 			{ manifestId: "ai.michaelp.tally.leave", controllerType: "Keypad", coordinates: { column: 3, row: 1 } },
 		],
 	};
-	const visibleActionsForDeviceType = (type: number) =>
+	const visibleActionsForDeviceType = (type: number): readonly ProfileSwitchVisibleAction[] =>
 		bundledVisibleActionsByDeviceType[type as keyof typeof bundledVisibleActionsByDeviceType] ?? [];
-	const device = (id: string, type: number, visibleActions = visibleActionsForDeviceType(type)) => ({ id, type, visibleActions });
+	const device = (id: string, type: number, visibleActions: readonly ProfileSwitchVisibleAction[] = visibleActionsForDeviceType(type)) => ({
+		id,
+		type,
+		visibleActions,
+	});
 	const devices = [device("SD15", 0), device("PLUS", 7), device("XL", 2)];
 
 	const afterSwitch: ProfileSwitchState = { isInMeeting: true, switchedDeviceIds: ["SD15", "PLUS"] };
+
+	it("keeps switch-back anchors aligned with the bundled profile layouts", () => {
+		expect(anchorActionsByDeviceTypeFromProfiles()).toEqual(REQUIRED_VISIBLE_ACTIONS_BY_DEVICE_TYPE);
+	});
 
 	it("never switches while auto-switch is disabled", () => {
 		const result = nextProfileSwitch(INITIAL_PROFILE_SWITCH_STATE, {
@@ -252,3 +263,19 @@ describe("profile auto-switch decisions", () => {
 		);
 	});
 });
+
+const SWITCH_BACK_ANCHOR_MANIFEST_IDS = ["ai.michaelp.tally.mute", "ai.michaelp.tally.leave"] as const;
+
+function anchorActionsByDeviceTypeFromProfiles(): Record<number, readonly ProfileSwitchVisibleAction[]> {
+	return Object.fromEntries(
+		PROFILES.map((profile) => [
+			profile.deviceType,
+			SWITCH_BACK_ANCHOR_MANIFEST_IDS.map((manifestId) => {
+				const entry = Object.entries(profile.keys).find(([, action]) => action.uuid === manifestId);
+				if (!entry) throw new Error(`${profile.displayName} is missing ${manifestId}`);
+				const [column, row] = entry[0].split(",").map((part) => Number(part));
+				return { manifestId, controllerType: "Keypad", coordinates: { column, row } };
+			}),
+		]),
+	);
+}
