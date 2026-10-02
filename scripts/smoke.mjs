@@ -50,12 +50,24 @@ deck.on("connection", (socket) => {
 });
 const toPlugin = (msg) => pluginSocket.send(JSON.stringify(msg));
 const event = (name, kind, context, payload) => toPlugin({ event: name, action: `${UUID}.${kind}`, context, device: DEVICE, payload });
-const keyPayload = (settings = {}) => ({ settings, coordinates: { column: 0, row: 0 }, controller: "Keypad", isInMultiAction: false, state: 0 });
+const keyPayload = (settings = {}, coordinates = { column: 0, row: 0 }) => ({
+	settings,
+	coordinates,
+	controller: "Keypad",
+	isInMultiAction: false,
+	state: 0,
+});
 const dialPayload = { settings: {}, coordinates: { column: 0, row: 0 }, controller: "Encoder", isInMultiAction: false };
+// DECK1 is the fake Stream Deck + (device type 7); these are the bundled profile's switch-back anchors.
+const STREAM_DECK_PLUS_PROFILE_KEYS = {
+	mute: { column: 0, row: 0 },
+	leave: { column: 3, row: 1 },
+};
 const lastImage = (context) => {
 	const all = fromPlugin.filter((m) => m.event === "setImage" && m.context === context);
 	return all.length ? Buffer.from(all.at(-1).payload.image.split(",")[1], "base64").toString() : "";
 };
+const imageCount = (context) => fromPlugin.filter((m) => m.event === "setImage" && m.context === context).length;
 const feedback = (context) => fromPlugin.filter((m) => m.event === "setFeedback" && m.context === context).at(-1)?.payload;
 const alerts = (context) => fromPlugin.filter((m) => m.event === "showAlert" && m.context === context).length;
 const globalSettingsRequests = () => fromPlugin.filter((m) => m.event === "getGlobalSettings");
@@ -333,6 +345,12 @@ try {
 	status();
 	await until(() => profileSwitches().length === 1, "profile auto-switch switches to Tally on the next meeting start");
 	check(profileSwitches().at(-1).payload.profile === "profiles/Tally (Stream Deck +)", "…using the bundled Stream Deck + profile name");
+	event("willAppear", "mute", "PROFILE_MUTE", keyPayload({}, STREAM_DECK_PLUS_PROFILE_KEYS.mute));
+	event("willAppear", "leave", "PROFILE_LEAVE", keyPayload({}, STREAM_DECK_PLUS_PROFILE_KEYS.leave));
+	await until(
+		() => imageCount("PROFILE_MUTE") > 0 && imageCount("PROFILE_LEAVE") > 0,
+		"bundled Stream Deck + profile Mute and Leave actions are visible",
+	);
 	buttons = {};
 	status();
 	await until(() => profileSwitches().length === 2, "profile auto-switch returns to the previous profile on meeting end", 12_000);
