@@ -8,8 +8,10 @@ import {
 	INITIAL_PROFILE_SWITCH_STATE,
 	meetingStatusForProfileSwitch,
 	nextProfileSwitch,
+	type ProfileSwitchControllerType,
 	type ProfileSwitchDevice,
 	type ProfileSwitchState,
+	type ProfileSwitchVisibleAction,
 } from "./profiles";
 import { TeamsBridge } from "./teams/bridge";
 import type { Snapshot } from "./teams/protocol";
@@ -20,7 +22,6 @@ streamDeck.logger.setLevel("info");
 // The Swift helper is built next to this bundle (bin/teams-bridge). TEAMS_BRIDGE overrides it
 // for the end-to-end smoke test, which substitutes a scripted fake.
 const bridgePath = process.env.TEAMS_BRIDGE ?? join(dirname(fileURLToPath(import.meta.url)), "teams-bridge");
-const PLUGIN_UUID = "ai.michaelp.tally";
 
 // `streamdeck pack` drops the executable bit, so an installed plugin can't launch its helper
 // until it's restored. The plugin folder belongs to the user, so this is allowed.
@@ -70,17 +71,38 @@ function connectedProfileDevices(): ProfileSwitchDevice[] {
 	const devices: ProfileSwitchDevice[] = [];
 	streamDeck.devices.forEach((device) => {
 		if (device.isConnected !== false) {
-			devices.push({ id: device.id, type: device.type, hasVisibleTallyActions: hasVisibleTallyActions(device) });
+			devices.push({ id: device.id, type: device.type, visibleActions: visibleActions(device) });
 		}
 	});
 	return devices;
 }
 
-function hasVisibleTallyActions(device: { actions: Iterable<{ manifestId: string }> }): boolean {
+function visibleActions(
+	device: { actions: Iterable<{ manifestId: string; controllerType?: string; coordinates?: { column?: number; row?: number } }> },
+): ProfileSwitchVisibleAction[] {
+	const actions: ProfileSwitchVisibleAction[] = [];
 	for (const action of device.actions) {
-		if (action.manifestId.startsWith(`${PLUGIN_UUID}.`)) return true;
+		const coordinates = readCoordinates(action.coordinates);
+		const controllerType = readControllerType(action.controllerType);
+		actions.push({
+			manifestId: action.manifestId,
+			...(controllerType ? { controllerType } : {}),
+			...(coordinates ? { coordinates } : {}),
+		});
 	}
-	return false;
+	return actions;
+}
+
+function readControllerType(controllerType: string | undefined): ProfileSwitchControllerType | undefined {
+	if (controllerType === "Encoder" || controllerType === "Keypad" || controllerType === "Neo") return controllerType;
+	return undefined;
+}
+
+function readCoordinates(coordinates: { column?: number; row?: number } | undefined): ProfileSwitchVisibleAction["coordinates"] {
+	const column = coordinates?.column;
+	const row = coordinates?.row;
+	if (typeof column !== "number" || typeof row !== "number" || !Number.isInteger(column) || !Number.isInteger(row)) return undefined;
+	return { column, row };
 }
 
 async function syncMeetingProfile(snapshot: Snapshot): Promise<void> {

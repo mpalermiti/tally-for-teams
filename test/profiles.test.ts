@@ -40,7 +40,7 @@ describe("bundled profiles", () => {
 		for (const file of buildProfileFiles()) {
 			if (!file.path.endsWith(".streamDeckProfile")) continue;
 			const committed = readFileSync(new URL(`../ai.michaelp.tally.sdPlugin/${file.path}`, import.meta.url));
-			expect(Buffer.compare(committed, file.data), file.path).toBe(0);
+			expect(Buffer.compare(committed, file.data), `${file.path}: run npm run profiles`).toBe(0);
 		}
 	});
 
@@ -61,7 +61,7 @@ describe("bundled profiles", () => {
 			);
 			const rootManifest = entries.get(`${root}/manifest.json`);
 			expect(rootManifest?.Pages?.Default, profile.manifestName).not.toBe(rootManifest?.Pages?.Current);
-			expect(rootManifest?.Pages?.Pages, profile.manifestName).toEqual([rootManifest?.Pages?.Default, rootManifest?.Pages?.Current]);
+			expect(rootManifest?.Pages?.Pages, profile.manifestName).toEqual([rootManifest?.Pages?.Current]);
 
 			const defaultPage = entries.get(`${root}/Profiles/${rootManifest?.Pages?.Default.toUpperCase()}/manifest.json`);
 			expect(defaultPage?.Controllers?.every((controller) => controller.Actions === null), profile.manifestName).toBe(true);
@@ -75,7 +75,9 @@ describe("bundled profiles", () => {
 		}
 
 		const streamDeckProfile = PROFILES.find((profile) => profile.manifestName === "profiles/Tally (Stream Deck)");
-		expect(streamDeckProfile?.model).toBe("20GBD9901");
+		expect(streamDeckProfile?.model).toBe("20GBA9901");
+		const streamDeckPlusProfile = PROFILES.find((profile) => profile.manifestName === "profiles/Tally (Stream Deck +)");
+		expect(streamDeckPlusProfile?.model).toBe("20GBD9901");
 	});
 
 	it("lays out the 15-key profile with every requested Tally action", () => {

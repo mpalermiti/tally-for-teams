@@ -160,7 +160,7 @@ setting is off, Tally never sends `switchToProfile`.
 
 Releases go to [GitHub Releases](https://github.com/mpalermiti/tally-for-teams/releases), not npm (the package is private). Pushing a version tag makes CI build the plugin and attach `Tally.streamDeckPlugin`. `npm version` below only edits the version number.
 
-1. `npm version X.Y.Z --no-git-tag-version` (updates `package.json` and `package-lock.json`), and set `Version` to `X.Y.Z.0` in `ai.michaelp.tally.sdPlugin/manifest.json`.
+1. `npm version X.Y.Z --no-git-tag-version` (updates `package.json` and `package-lock.json`), set `Version` to `X.Y.Z.0` in `ai.michaelp.tally.sdPlugin/manifest.json`, then run `npm run profiles`.
 2. `npm run version:check`.
 3. Commit the bump.
 4. `git tag vX.Y.Z`.

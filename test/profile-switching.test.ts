@@ -10,11 +10,20 @@ import {
 import { EMPTY_STATE, NO_PERMISSIONS, type Snapshot } from "../src/teams/protocol";
 
 describe("profile auto-switch decisions", () => {
-	const devices = [
-		{ id: "SD15", type: 0, hasVisibleTallyActions: true },
-		{ id: "PLUS", type: 7, hasVisibleTallyActions: true },
-		{ id: "XL", type: 2, hasVisibleTallyActions: true },
-	];
+	const bundledVisibleActionsByDeviceType = {
+		0: [
+			{ manifestId: "ai.michaelp.tally.mute", controllerType: "Keypad", coordinates: { column: 0, row: 0 } },
+			{ manifestId: "ai.michaelp.tally.leave", controllerType: "Keypad", coordinates: { column: 4, row: 2 } },
+		],
+		7: [
+			{ manifestId: "ai.michaelp.tally.mute", controllerType: "Keypad", coordinates: { column: 0, row: 0 } },
+			{ manifestId: "ai.michaelp.tally.leave", controllerType: "Keypad", coordinates: { column: 3, row: 1 } },
+		],
+	};
+	const visibleActionsForDeviceType = (type: number) =>
+		bundledVisibleActionsByDeviceType[type as keyof typeof bundledVisibleActionsByDeviceType] ?? [];
+	const device = (id: string, type: number, visibleActions = visibleActionsForDeviceType(type)) => ({ id, type, visibleActions });
+	const devices = [device("SD15", 0), device("PLUS", 7), device("XL", 2)];
 
 	const afterSwitch: ProfileSwitchState = { isInMeeting: true, switchedDeviceIds: ["SD15", "PLUS"] };
 
@@ -165,9 +174,33 @@ describe("profile auto-switch decisions", () => {
 	});
 
 	it("does not yank devices that no longer show Tally actions on meeting end", () => {
+		const devicesAfterUserSwitch = [device("SD15", 0, []), device("PLUS", 7)];
+		const ending = nextProfileSwitch(afterSwitch, {
+			autoSwitchProfile: true,
+			meetingStatus: "not-in-meeting",
+			nowMs: 1_000,
+			devices: devicesAfterUserSwitch,
+		});
+
+		expect(
+			nextProfileSwitch(ending.state, {
+				autoSwitchProfile: true,
+				meetingStatus: "not-in-meeting",
+				nowMs: 1_000 + PROFILE_SWITCH_BACK_DELAY_MS,
+				devices: devicesAfterUserSwitch,
+			}).actions,
+		).toEqual([
+			{ deviceId: "PLUS" },
+		]);
+	});
+
+	it("does not yank devices that only show Tally actions in a custom layout", () => {
 		const devicesAfterUserSwitch = [
-			{ id: "SD15", type: 0, hasVisibleTallyActions: false },
-			{ id: "PLUS", type: 7, hasVisibleTallyActions: true },
+			device("SD15", 0, [
+				{ manifestId: "ai.michaelp.tally.mute", controllerType: "Keypad", coordinates: { column: 2, row: 2 } },
+				{ manifestId: "ai.michaelp.tally.leave", controllerType: "Keypad", coordinates: { column: 4, row: 2 } },
+			]),
+			device("PLUS", 7),
 		];
 		const ending = nextProfileSwitch(afterSwitch, {
 			autoSwitchProfile: true,
@@ -186,6 +219,31 @@ describe("profile auto-switch decisions", () => {
 		).toEqual([
 			{ deviceId: "PLUS" },
 		]);
+	});
+
+	it("does not count dial actions as bundled key layout anchors", () => {
+		const devicesAfterUserSwitch = [
+			device("SD15", 0),
+			device("PLUS", 7, [
+				{ manifestId: "ai.michaelp.tally.mute", controllerType: "Encoder", coordinates: { column: 0, row: 0 } },
+				{ manifestId: "ai.michaelp.tally.leave", controllerType: "Keypad", coordinates: { column: 3, row: 1 } },
+			]),
+		];
+		const ending = nextProfileSwitch(afterSwitch, {
+			autoSwitchProfile: true,
+			meetingStatus: "not-in-meeting",
+			nowMs: 1_000,
+			devices: devicesAfterUserSwitch,
+		});
+
+		expect(
+			nextProfileSwitch(ending.state, {
+				autoSwitchProfile: true,
+				meetingStatus: "not-in-meeting",
+				nowMs: 1_000 + PROFILE_SWITCH_BACK_DELAY_MS,
+				devices: devicesAfterUserSwitch,
+			}).actions,
+		).toEqual([{ deviceId: "SD15" }]);
 	});
 
 	it("maps offline snapshots to unknown", () => {

@@ -1,5 +1,7 @@
 import type { Snapshot } from "./teams/protocol";
 
+const PLUGIN_UUID = "ai.michaelp.tally";
+
 export const TALLY_PROFILE_BY_DEVICE_TYPE = {
 	0: "profiles/Tally (Stream Deck)",
 	7: "profiles/Tally (Stream Deck +)",
@@ -10,7 +12,20 @@ export const PROFILE_SWITCH_BACK_DELAY_MS = 8_000;
 export interface ProfileSwitchDevice {
 	id: string;
 	type: number;
-	hasVisibleTallyActions: boolean;
+	visibleActions: readonly ProfileSwitchVisibleAction[];
+}
+
+export interface ProfileSwitchVisibleAction {
+	manifestId: string;
+	controllerType?: ProfileSwitchControllerType;
+	coordinates?: ProfileSwitchCoordinates;
+}
+
+export type ProfileSwitchControllerType = "Encoder" | "Keypad" | "Neo";
+
+export interface ProfileSwitchCoordinates {
+	column: number;
+	row: number;
 }
 
 export interface ProfileSwitchState {
@@ -45,6 +60,19 @@ export const INITIAL_PROFILE_SWITCH_STATE: ProfileSwitchState = { isInMeeting: f
 
 export function profileNameForDeviceType(type: number): string | undefined {
 	return TALLY_PROFILE_BY_DEVICE_TYPE[type as keyof typeof TALLY_PROFILE_BY_DEVICE_TYPE];
+}
+
+export function hasBundledProfileVisibleActions(device: Pick<ProfileSwitchDevice, "type" | "visibleActions">): boolean {
+	const requiredActions = REQUIRED_VISIBLE_ACTIONS_BY_DEVICE_TYPE[device.type as keyof typeof REQUIRED_VISIBLE_ACTIONS_BY_DEVICE_TYPE];
+	if (!requiredActions) return false;
+	return requiredActions.every((required) =>
+		device.visibleActions.some(
+			(action) =>
+				action.manifestId === required.manifestId &&
+				action.controllerType === required.controllerType &&
+				sameCoordinates(action.coordinates, required.coordinates),
+		),
+	);
 }
 
 export function meetingStatusForProfileSwitch(snapshot: Snapshot): ProfileMeetingStatus {
@@ -98,7 +126,25 @@ export function nextProfileSwitch(
 
 	const previouslySwitched = new Set(previous.switchedDeviceIds);
 	const actions = supported
-		.filter(({ device }) => previouslySwitched.has(device.id) && device.hasVisibleTallyActions)
+		.filter(({ device }) => previouslySwitched.has(device.id) && hasBundledProfileVisibleActions(device))
 		.map(({ device }) => ({ deviceId: device.id }));
 	return { state: { isInMeeting: false, switchedDeviceIds: [] }, actions };
+}
+
+const REQUIRED_VISIBLE_ACTIONS_BY_DEVICE_TYPE = {
+	0: [
+		{ manifestId: `${PLUGIN_UUID}.mute`, controllerType: "Keypad", coordinates: { column: 0, row: 0 } },
+		{ manifestId: `${PLUGIN_UUID}.leave`, controllerType: "Keypad", coordinates: { column: 4, row: 2 } },
+	],
+	7: [
+		{ manifestId: `${PLUGIN_UUID}.mute`, controllerType: "Keypad", coordinates: { column: 0, row: 0 } },
+		{ manifestId: `${PLUGIN_UUID}.leave`, controllerType: "Keypad", coordinates: { column: 3, row: 1 } },
+	],
+} as const satisfies Record<
+	number,
+	readonly { manifestId: string; controllerType: ProfileSwitchControllerType; coordinates: ProfileSwitchCoordinates }[]
+>;
+
+function sameCoordinates(actual: ProfileSwitchCoordinates | undefined, expected: ProfileSwitchCoordinates): boolean {
+	return actual !== undefined && actual.column === expected.column && actual.row === expected.row;
 }
