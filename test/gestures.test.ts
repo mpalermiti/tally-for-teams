@@ -1,6 +1,14 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { HoldToConfirm, HoldToggle, RotateToggle, shouldHoldMuteKey, shouldHoldToLeave } from "../src/actions/gestures";
+import {
+	HoldToConfirm,
+	HoldToggle,
+	RotateToggle,
+	resolveHoldRelease,
+	shouldHoldMuteKey,
+	shouldHoldToLeave,
+} from "../src/actions/gestures";
+import type { RequestResult } from "../src/teams/protocol";
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -10,57 +18,260 @@ function clock(start = 1_000) {
 	return { now: () => t, advance: (ms: number) => (t += ms) };
 }
 
+const OK: RequestResult = { ok: true, message: "pressed" };
+const REFUSED: RequestResult = { ok: false, message: "no mic" };
+const releaseDefaults = () => ({
+	currentMuted: () => false as boolean | undefined,
+	waitForChange: () => Promise.resolve(false),
+	toggleBack: () => Promise.resolve(OK),
+});
+
+function deferred<T>() {
+	let resolve!: (value: T) => void;
+	const promise = new Promise<T>((r) => {
+		resolve = r;
+	});
+	return { promise, resolve };
+}
+
+describe("resolveHoldRelease", () => {
+	it("doesn't toggle back when Teams refused the key-down press", async () => {
+		const waitForChange = vi.fn(() => Promise.resolve(true));
+		await expect(
+			resolveHoldRelease({
+				startMuted: true,
+				press: Promise.resolve(REFUSED),
+				currentMuted: () => false,
+				waitForChange,
+			}),
+		).resolves.toBe(false);
+		expect(waitForChange).not.toHaveBeenCalled();
+	});
+
+	it("toggles back when Teams has already reported the flipped mute state", async () => {
+		await expect(
+			resolveHoldRelease({
+				startMuted: true,
+				press: Promise.resolve(OK),
+				currentMuted: () => false,
+				waitForChange: () => Promise.resolve(false),
+			}),
+		).resolves.toBe(true);
+	});
+
+	it("waits for a later bridge change before toggling back", async () => {
+		vi.useFakeTimers();
+		const flip = deferred<boolean>();
+		const resolved = resolveHoldRelease({
+			startMuted: true,
+			press: Promise.resolve(OK),
+			currentMuted: () => true,
+			waitForChange: (_start, timeoutMs) =>
+				new Promise((resolve) => {
+					setTimeout(() => resolve(false), timeoutMs);
+					flip.promise.then(resolve);
+				}),
+			timeoutMs: 1_500,
+		});
+
+		await vi.advanceTimersByTimeAsync(300);
+		flip.resolve(true);
+
+		await expect(resolved).resolves.toBe(true);
+	});
+
+	it("doesn't toggle back, and warns, when Teams never reports the flipped mute state", async () => {
+		vi.useFakeTimers();
+		const warn = vi.fn();
+		const resolved = resolveHoldRelease({
+			startMuted: true,
+			press: Promise.resolve(OK),
+			currentMuted: () => true,
+			waitForChange: (_start, timeoutMs) => new Promise((resolve) => setTimeout(() => resolve(false), timeoutMs)),
+			timeoutMs: 1_500,
+			warn,
+		});
+
+		await vi.advanceTimersByTimeAsync(1_500);
+
+		await expect(resolved).resolves.toBe(false);
+		expect(warn).toHaveBeenCalledWith(expect.stringContaining("never reported"));
+	});
+
+	it("keeps unknown mute state as a single toggle with no toggle-back", async () => {
+		const waitForChange = vi.fn(() => Promise.resolve(true));
+		await expect(
+			resolveHoldRelease({
+				startMuted: undefined,
+				press: Promise.resolve(OK),
+				currentMuted: () => false,
+				waitForChange,
+			}),
+		).resolves.toBe(false);
+		expect(waitForChange).not.toHaveBeenCalled();
+	});
+});
+
 describe("HoldToggle", () => {
-	it("toggles immediately on press, so a tap feels instant", () => {
+	it("toggles immediately on press, so a tap feels instant", async () => {
 		const c = clock();
 		const hold = new HoldToggle(400, c.now);
-		expect(hold.down(true)).toBe(true);
+		await expect(hold.down(() => true, () => Promise.resolve(OK))).resolves.toBe(OK);
 		c.advance(120);
-		expect(hold.up(false)).toBe(false); // tap: stay toggled
+		await expect(hold.up(releaseDefaults())).resolves.toMatchObject({ toggledBack: false }); // tap: stay toggled
 	});
 
-	it("toggles back on release after a hold (push-to-talk when muted)", () => {
+	it("toggles back on release after a hold (push-to-talk when muted)", async () => {
 		const c = clock();
 		const hold = new HoldToggle(400, c.now);
-		hold.down(true); // muted → unmute
+		await hold.down(() => true, () => Promise.resolve(OK)); // muted → unmute
 		c.advance(900);
-		expect(hold.up(false)).toBe(true); // now live → re-mute
+		await expect(hold.up(releaseDefaults())).resolves.toMatchObject({ toggledBack: true, result: OK }); // now live → re-mute
 	});
 
-	it("works the other way round as a cough button when live", () => {
+	it("works the other way round as a cough button when live", async () => {
 		const c = clock();
 		const hold = new HoldToggle(400, c.now);
-		hold.down(false);
+		await hold.down(() => false, () => Promise.resolve(OK));
 		c.advance(600);
-		expect(hold.up(true)).toBe(true);
+		await expect(
+			hold.up({
+				...releaseDefaults(),
+				currentMuted: () => true,
+			}),
+		).resolves.toMatchObject({ toggledBack: true, result: OK });
 	});
 
-	it("doesn't toggle back if Teams never applied the first toggle", () => {
+	it("doesn't toggle back if Teams never applied the first toggle", async () => {
 		const c = clock();
 		const hold = new HoldToggle(400, c.now);
-		hold.down(true);
+		await hold.down(() => true, () => Promise.resolve(OK));
 		c.advance(900);
-		expect(hold.up(true)).toBe(false); // still muted: toggling would unmute by surprise
+		await expect(
+			hold.up({
+				...releaseDefaults(),
+				currentMuted: () => true,
+			}),
+		).resolves.toMatchObject({ toggledBack: false }); // still muted: toggling would unmute by surprise
 	});
 
-	it("treats an unknown mute state as a single toggle with no release toggle-back", () => {
+	it("treats an unknown mute state as a single toggle with no release toggle-back", async () => {
 		const c = clock();
 		const hold = new HoldToggle(400, c.now);
-		expect(hold.down(undefined)).toBe(true);
+		await expect(hold.down(() => undefined, () => Promise.resolve(OK))).resolves.toBe(OK);
 		c.advance(900);
-		expect(hold.up(false)).toBe(false);
+		await expect(hold.up(releaseDefaults())).resolves.toMatchObject({ toggledBack: false });
 	});
 
-	it("ignores a release with no matching press", () => {
-		expect(new HoldToggle().up(true)).toBe(false);
+	it("ignores a release with no matching press", async () => {
+		await expect(new HoldToggle().up(releaseDefaults())).resolves.toMatchObject({ toggledBack: false });
 	});
 
-	it("uses a monotonic default clock, so a backwards wall-clock step still releases a hold", () => {
+	it("uses a monotonic default clock, so a backwards wall-clock step still releases a hold", async () => {
 		vi.spyOn(Date, "now").mockReturnValueOnce(1_000).mockReturnValueOnce(500);
 		vi.spyOn(performance, "now").mockReturnValueOnce(0).mockReturnValueOnce(500);
 		const hold = new HoldToggle(400);
-		hold.down(true);
-		expect(hold.up(false)).toBe(true);
+		await hold.down(() => true, () => Promise.resolve(OK));
+		await expect(hold.up(releaseDefaults())).resolves.toMatchObject({ toggledBack: true, result: OK });
+	});
+
+	it("serializes the next hold until the previous release finishes toggling back", async () => {
+		const c = clock();
+		const hold = new HoldToggle(400, c.now);
+		await hold.down(() => true, () => Promise.resolve(OK));
+		c.advance(900);
+
+		const flip = deferred<boolean>();
+		const toggleBack = deferred<RequestResult>();
+		const firstRelease = hold.up({
+			...releaseDefaults(),
+			currentMuted: () => true,
+			waitForChange: () => flip.promise,
+			toggleBack: () => toggleBack.promise,
+		});
+
+		let reads = 0;
+		let presses = 0;
+		const secondDown = hold.down(
+			() => {
+				reads++;
+				return false;
+			},
+			() => {
+				presses++;
+				return Promise.resolve(OK);
+			},
+		);
+		await Promise.resolve();
+		expect(reads).toBe(0);
+		expect(presses).toBe(0);
+
+		flip.resolve(true);
+		await Promise.resolve();
+		expect(reads).toBe(0);
+		expect(presses).toBe(0);
+
+		toggleBack.resolve(OK);
+		await expect(firstRelease).resolves.toMatchObject({ toggledBack: true, result: OK });
+		await expect(secondDown).resolves.toBe(OK);
+		expect(reads).toBe(1);
+		expect(presses).toBe(1);
+	});
+
+	it("queues a re-hold release until the delayed down has started", async () => {
+		const c = clock();
+		const hold = new HoldToggle(400, c.now);
+		let muted = true;
+		await hold.down(() => muted, () => Promise.resolve(OK));
+		c.advance(900);
+
+		const firstFlip = deferred<boolean>();
+		const firstToggleBack = deferred<RequestResult>();
+		const firstRelease = hold.up({
+			...releaseDefaults(),
+			currentMuted: () => muted,
+			waitForChange: () =>
+				firstFlip.promise.then((flipped) => {
+					if (flipped) muted = false;
+					return flipped;
+				}),
+			toggleBack: () =>
+				firstToggleBack.promise.then((result) => {
+					muted = true;
+					return result;
+				}),
+		});
+
+		const secondDown = hold.down(
+			() => muted,
+			() => {
+				muted = false;
+				return Promise.resolve(OK);
+			},
+		);
+		c.advance(500);
+		const secondRelease = hold.up({
+			...releaseDefaults(),
+			currentMuted: () => muted,
+			toggleBack: () => {
+				muted = true;
+				return Promise.resolve(OK);
+			},
+		});
+		let secondResolved = false;
+		void secondRelease.then(() => {
+			secondResolved = true;
+		});
+		await Promise.resolve();
+		expect(secondResolved).toBe(false);
+
+		firstFlip.resolve(true);
+		firstToggleBack.resolve(OK);
+
+		await expect(firstRelease).resolves.toMatchObject({ toggledBack: true, result: OK });
+		await expect(secondDown).resolves.toBe(OK);
+		await expect(secondRelease).resolves.toMatchObject({ toggledBack: true, result: OK });
+		expect(muted).toBe(true);
 	});
 });
 

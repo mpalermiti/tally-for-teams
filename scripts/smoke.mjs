@@ -158,6 +158,18 @@ try {
 
 	presses = commands("press").length;
 	event("keyDown", "mute", "MUTE1", keyPayload());
+	await until(() => commands("press").length === presses + 1, "pressing the mute key starts a laggy hold");
+	await sleep(500);
+	event("keyUp", "mute", "MUTE1", keyPayload());
+	await sleep(300);
+	check(commands("press").length === presses + 1, "laggy mute-key release waits for Teams to report the first toggle");
+	pressMic(true);
+	await until(() => commands("press").length === presses + 2, "laggy mute-key release still toggles back after Teams reports live");
+	pressMic(false);
+	await until(() => !lastImage("MUTE1").includes("radialGradient"), "mute key returns to muted after laggy hold release");
+
+	presses = commands("press").length;
+	event("keyDown", "mute", "MUTE1", keyPayload());
 	await until(() => commands("press").length === presses + 1, "a quick mute-key tap toggles immediately");
 	pressMic(true);
 	event("keyUp", "mute", "MUTE1", keyPayload());
@@ -233,6 +245,18 @@ try {
 	await until(() => commands("press").length === presses + 2, "releasing after a hold mutes again (push-to-talk)");
 	pressMic(false);
 	await until(() => feedback("DIAL1")?.label?.value === "Muted", "dial back to Muted");
+
+	presses = commands("press").length;
+	event("dialDown", "mute", "DIAL1", dialPayload);
+	await until(() => commands("press").length === presses + 1, "pressing the dial starts a laggy hold");
+	await sleep(500);
+	event("dialUp", "mute", "DIAL1", dialPayload);
+	await sleep(300);
+	check(commands("press").length === presses + 1, "laggy dial release waits for Teams to report the first toggle");
+	pressMic(true);
+	await until(() => commands("press").length === presses + 2, "laggy dial release still toggles back after Teams reports live");
+	pressMic(false);
+	await until(() => feedback("DIAL1")?.label?.value === "Muted", "dial back to Muted after laggy hold release");
 
 	// Turn right once (a burst of ticks) → one unmute.
 	await sleep(600);

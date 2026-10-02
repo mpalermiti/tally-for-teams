@@ -42,12 +42,28 @@ export abstract class TeamsKey extends SingletonAction<KeySettings> {
 	}
 
 	/** Runs a Teams request and flashes the key or dial if Teams refuses it. */
-	protected async perform(action: KeyAction<KeySettings> | DialAction<KeySettings>, request: Promise<RequestResult>): Promise<void> {
+	protected async perform(
+		action: KeyAction<KeySettings> | DialAction<KeySettings>,
+		request: Promise<RequestResult>,
+		{ alert = true }: { alert?: boolean } = {},
+	): Promise<void> {
 		const result = await request;
+		await this.reportResult(action, result, { alert });
+	}
+
+	protected async reportResult(
+		action: KeyAction<KeySettings> | DialAction<KeySettings>,
+		result: RequestResult,
+		{ alert = true }: { alert?: boolean } = {},
+	): Promise<void> {
 		if (!result.ok) {
-			streamDeck.logger.warn(`${this.kind}: ${result.message}`);
-			await action.showAlert();
+			this.warn(result.message);
+			if (alert) await action.showAlert();
 		}
+	}
+
+	protected warn(message: string): void {
+		streamDeck.logger.warn(`${this.kind}: ${message}`);
 	}
 
 	override onWillAppear(ev: WillAppearEvent<KeySettings>): Promise<void> {

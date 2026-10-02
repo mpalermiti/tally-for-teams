@@ -1,5 +1,6 @@
 import {
 	action,
+	type DialAction,
 	type DialDownEvent,
 	type DialRotateEvent,
 	type DialUpEvent,
@@ -11,6 +12,7 @@ import {
 } from "@elgato/streamdeck";
 
 import { muteDialFeedback } from "../render/key";
+import type { Snapshot } from "../teams/protocol";
 import { HOLD_TO_LEAVE_MS, HoldToConfirm, HoldToggle, RotateToggle, shouldHoldMuteKey, shouldHoldToLeave } from "./gestures";
 import { TeamsKey, type KeySettings } from "./teams-key";
 
@@ -37,31 +39,32 @@ export class MuteKey extends TeamsKey {
 
 	override onKeyDown(ev: KeyDownEvent<KeySettings>): Promise<void> {
 		if (!shouldHoldMuteKey({ isInMultiAction: ev.payload.isInMultiAction })) return super.onKeyDown(ev);
-		const hold = new HoldToggle();
-		hold.down(this.#muted);
-		this.#keyHolds.set(ev.action.id, hold);
-		return this.perform(ev.action, this.press());
+		const hold = this.#keyHold(ev.action.id);
+		return this.perform(ev.action, hold.down(() => this.#muted, () => this.press()));
 	}
 
 	override async onKeyUp(ev: KeyUpEvent<KeySettings>): Promise<void> {
 		const hold = this.#keyHolds.get(ev.action.id);
 		if (!hold) return;
-		this.#keyHolds.delete(ev.action.id);
-		if (hold.up(this.#muted)) await this.perform(ev.action, this.press());
+		await this.#releaseHold(hold, ev.action, true);
 	}
 
 	override onWillDisappear(ev: WillDisappearEvent<KeySettings>): void {
-		this.#keyHolds.delete(ev.action.id);
+		const hold = this.#keyHolds.get(ev.action.id);
+		if (hold) {
+			void this.#releaseHold(hold, ev.action, false).finally(() => {
+				if (this.#keyHolds.get(ev.action.id) === hold) this.#keyHolds.delete(ev.action.id);
+			});
+		}
 		super.onWillDisappear(ev);
 	}
 
 	override onDialDown(ev: DialDownEvent<KeySettings>): Promise<void> {
-		this.#dialHold.down(this.#muted);
-		return this.perform(ev.action, this.press());
+		return this.perform(ev.action, this.#dialHold.down(() => this.#muted, () => this.press()));
 	}
 
 	override async onDialUp(ev: DialUpEvent<KeySettings>): Promise<void> {
-		if (this.#dialHold.up(this.#muted)) await this.perform(ev.action, this.press());
+		await this.#releaseHold(this.#dialHold, ev.action, true);
 	}
 
 	override async onDialRotate(ev: DialRotateEvent<KeySettings>): Promise<void> {
@@ -75,6 +78,47 @@ export class MuteKey extends TeamsKey {
 	get #muted(): boolean | undefined {
 		const { state } = this.teams.snapshot;
 		return state.isMuteKnown ? state.isMuted : undefined;
+	}
+
+	#keyHold(id: string): HoldToggle {
+		const existing = this.#keyHolds.get(id);
+		if (existing) return existing;
+		const hold = new HoldToggle();
+		this.#keyHolds.set(id, hold);
+		return hold;
+	}
+
+	async #releaseHold(hold: HoldToggle, action: KeyAction<KeySettings> | DialAction<KeySettings>, alert: boolean): Promise<void> {
+		const result = await hold.up({
+			currentMuted: () => this.#muted,
+			waitForChange: (startMuted, timeoutMs) => this.#waitForMuteChange(startMuted, timeoutMs),
+			warn: (message) => this.warn(message),
+			toggleBack: () => this.press(),
+		});
+		if (result.toggledBack) await this.reportResult(action, result.result, { alert });
+	}
+
+	#waitForMuteChange(startMuted: boolean, timeoutMs: number): Promise<boolean> {
+		if (this.#muted !== undefined && this.#muted !== startMuted) return Promise.resolve(true);
+
+		return new Promise((resolve) => {
+			let settled = false;
+			let timer: ReturnType<typeof setTimeout>;
+			const finish = (flipped: boolean) => {
+				if (settled) return;
+				settled = true;
+				clearTimeout(timer);
+				this.teams.off("change", onChange);
+				resolve(flipped);
+			};
+			const onChange = (snapshot: Snapshot) => {
+				const muted = snapshot.state.isMuteKnown ? snapshot.state.isMuted : undefined;
+				if (muted !== undefined && muted !== startMuted) finish(true);
+			};
+			this.teams.on("change", onChange);
+			timer = setTimeout(() => finish(false), timeoutMs);
+			if (this.#muted !== undefined && this.#muted !== startMuted) finish(true);
+		});
 	}
 }
 

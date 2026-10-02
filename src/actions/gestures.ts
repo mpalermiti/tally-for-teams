@@ -4,12 +4,52 @@
  * based on the current mute state.
  */
 
+import type { RequestResult } from "../teams/protocol";
+
+const DEFAULT_HOLD_RELEASE_TIMEOUT_MS = 1_500;
+
+type MuteGetter = () => boolean | undefined;
+type MuteChangeWaiter = (startMuted: boolean, timeoutMs: number) => Promise<boolean>;
+
+export type HoldReleaseResult =
+	| { toggledBack: false }
+	| { toggledBack: true; result: RequestResult };
+
+export async function resolveHoldRelease({
+	startMuted,
+	press,
+	currentMuted,
+	waitForChange,
+	timeoutMs = DEFAULT_HOLD_RELEASE_TIMEOUT_MS,
+	warn,
+}: {
+	startMuted: boolean | undefined;
+	press: Promise<RequestResult>;
+	currentMuted: MuteGetter;
+	waitForChange: MuteChangeWaiter;
+	timeoutMs?: number;
+	warn?: (message: string) => void;
+}): Promise<boolean> {
+	const result = await press;
+	if (!result.ok || startMuted === undefined) return false;
+
+	const muted = currentMuted();
+	if (muted !== undefined && muted !== startMuted) return true;
+
+	if (await waitForChange(startMuted, timeoutMs)) return true;
+
+	warn?.("Teams accepted the held mute press but never reported the mic state change; not toggling back");
+	return false;
+}
+
 /**
  * Tap to toggle; hold to flip temporarily. Muted + hold = push-to-talk,
  * live + hold = cough button. The first toggle happens on press so a tap feels instant.
  */
 export class HoldToggle {
-	#down: { at: number; muted: boolean | undefined } | undefined;
+	#down: { at: number; muted: boolean | undefined; press: Promise<RequestResult> } | undefined;
+	#downReady: Promise<void> | undefined;
+	#release: Promise<unknown> = Promise.resolve();
 
 	constructor(
 		private readonly thresholdMs = 400,
@@ -17,18 +57,63 @@ export class HoldToggle {
 	) {}
 
 	/** Always toggles; remembers the state it started from. */
-	down(muted: boolean | undefined): true {
-		this.#down = { at: this.now(), muted };
-		return true;
+	down(currentMuted: MuteGetter, press: () => Promise<RequestResult>): Promise<RequestResult> {
+		const at = this.now();
+		let request: Promise<RequestResult>;
+		const started = this.#release.then(() => {
+			const muted = currentMuted();
+			request = press();
+			this.#down = { at, muted, press: request };
+		});
+		this.#downReady = started.then(
+			() => undefined,
+			() => undefined,
+		);
+		return started.then(() => request);
 	}
 
 	/** Toggles back only after a hold, and only if the first toggle actually landed. */
-	up(muted: boolean | undefined): boolean {
-		const down = this.#down;
-		this.#down = undefined;
-		if (!down) return false;
-		const held = this.now() - down.at >= this.thresholdMs;
-		return held && down.muted !== undefined && muted !== undefined && muted !== down.muted;
+	up({
+		currentMuted,
+		waitForChange,
+		timeoutMs,
+		warn,
+		toggleBack,
+	}: {
+		currentMuted: MuteGetter;
+		waitForChange: MuteChangeWaiter;
+		timeoutMs?: number;
+		warn?: (message: string) => void;
+		toggleBack: () => Promise<RequestResult>;
+	}): Promise<HoldReleaseResult> {
+		const releasedAt = this.now();
+		const downReady = this.#downReady ?? Promise.resolve();
+
+		const release = (async (): Promise<HoldReleaseResult> => {
+			await downReady;
+			const down = this.#down;
+			this.#down = undefined;
+			if (this.#downReady === downReady) this.#downReady = undefined;
+			if (!down) return { toggledBack: false };
+			const held = releasedAt - down.at >= this.thresholdMs;
+			if (!held) return { toggledBack: false };
+
+			const shouldToggleBack = await resolveHoldRelease({
+				startMuted: down.muted,
+				press: down.press,
+				currentMuted,
+				waitForChange,
+				timeoutMs,
+				warn,
+			});
+			if (!shouldToggleBack) return { toggledBack: false };
+			return { toggledBack: true, result: await toggleBack() };
+		})();
+		this.#release = release.then(
+			() => undefined,
+			() => undefined,
+		);
+		return release;
 	}
 }
 
