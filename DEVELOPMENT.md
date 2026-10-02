@@ -10,7 +10,7 @@ Stream Deck ──▶ plugin (Node, src/)  ──stdin/stdout JSON──▶  tea
 
 - **Finding the controls:** Teams exposes its accessibility tree only to assistive tech, so the helper sets the same switch VoiceOver does (`AXEnhancedUserInterface`) while it runs, and turns it off when it quits.
 - **One window at a time:** a meeting can have a full window and a compact view that swap in and out. The helper takes every button from the one window holding the mic button and the most of the others, so the two toolbars are never mixed.
-- **Keeping up with state:** it finds the toolbar buttons once, then re-reads just those every half second (about 0 ms). A full rescan (50–450 ms) happens within 2 s of any watched button going stale (Teams rebuilds the toolbar when sharing starts), and every 10 s in a meeting.
+- **Keeping up with state:** it finds the toolbar buttons and the `#indicators` container once, then re-reads just those every half second (about 0 ms for buttons; the indicator subtree is capped). A full rescan (50–450 ms) happens within 2 s of any watched button going stale (Teams rebuilds the toolbar when sharing starts), and every 10 s in a meeting.
 - **State Teams only shows as styling:** a raised hand keeps React's label; only its look changes. The plugin compares React with the plain toolbar buttons instead of matching Teams' generated class names, which change between builds.
 - **When Teams changes its interface:** button ids and label rules all live in `src/teams/selectors.ts`. The probes show what the current Teams exposes: `teams-ax-probe.swift` lists the toolbar, and `teams-ax-diff.swift` prints what changes as you do something.
 
@@ -35,7 +35,7 @@ npm run build           # compiles bin/teams-bridge (Swift) and bundles bin/plug
 npm run smoke           # end-to-end: the built plugin against a fake Stream Deck + scripted bridge
 npm run smoke:package   # package smoke: unzips the packed plugin and starts its real helper
 npm run watch           # rebuild + restart the plugin in Stream Deck on save
-npm run icons           # regenerate glyphs.ts and the plugin's own icons/PNGs
+npm run icons           # regenerate glyphs.ts plus action-list/key SVGs
 npm run sheet -- out.png   # render all keys in all states to one image
 ```
 
@@ -106,7 +106,11 @@ and can override only the changed pieces. Example:
 ```
 
 Label patterns are regex source strings compiled case-insensitively; invalid JSON or regex fields are
-reported in the plugin log and fall back to defaults. When Teams still looks like a meeting but the
+reported in the plugin log and fall back to defaults. Recording detection reads only descendants of
+the configured indicator containers (default `#indicators`) and matches `recording.ids` as
+case-insensitive id substrings or `recording.labels` as a case-insensitive regex. The meeting timer
+reads the `call-duration-custom` indicator label and parses the first `MM:SS` or `H:MM:SS` duration.
+The People key presses `buttonIds.people` (default `roster-button`). When Teams still looks like a meeting but the
 mic anchor is missing, Tally reports "Teams changed" and the plugin log lists the control ids it saw
 in that Teams window, capped for readability. It never logs labels or window titles.
 
