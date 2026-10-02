@@ -150,7 +150,7 @@ describe("resolveHoldRelease", () => {
 		expect(warn).toHaveBeenCalledWith(expect.stringContaining("never reported"));
 	});
 
-	it("keeps unknown mute state as a single toggle with no toggle-back", async () => {
+	it("treats an unknown-state successful press as applied without waiting for state", async () => {
 		const waitForChange = vi.fn(() => Promise.resolve(true));
 		await expect(
 			resolveHoldRelease({
@@ -159,7 +159,7 @@ describe("resolveHoldRelease", () => {
 				currentMuted: () => false,
 				waitForChange,
 			}),
-		).resolves.toBe(false);
+		).resolves.toBe(true);
 		expect(waitForChange).not.toHaveBeenCalled();
 	});
 });
@@ -207,12 +207,58 @@ describe("HoldToggle", () => {
 		).resolves.toMatchObject({ toggledBack: false }); // still muted: toggling would unmute by surprise
 	});
 
-	it("treats an unknown mute state as a single toggle with no release toggle-back", async () => {
+	it("toggles back after an unknown-state hold when the first press succeeded, without waiting for state", async () => {
 		const c = clock();
 		const hold = new HoldToggle(400, c.now);
+		const waitForChange = vi.fn(() => Promise.resolve(true));
+		const toggleBack = vi.fn(() => Promise.resolve(OK));
 		await expect(hold.down(() => undefined, () => Promise.resolve(OK))).resolves.toBe(OK);
 		c.advance(900);
-		await expect(hold.up(releaseDefaults())).resolves.toMatchObject({ toggledBack: false });
+		await expect(
+			hold.up({
+				...releaseDefaults(),
+				waitForChange,
+				toggleBack,
+			}),
+		).resolves.toMatchObject({ toggledBack: true, result: OK });
+		expect(waitForChange).not.toHaveBeenCalled();
+		expect(toggleBack).toHaveBeenCalledTimes(1);
+	});
+
+	it("doesn't toggle back after an unknown-state hold when the first press failed", async () => {
+		const c = clock();
+		const hold = new HoldToggle(400, c.now);
+		const waitForChange = vi.fn(() => Promise.resolve(true));
+		const toggleBack = vi.fn(() => Promise.resolve(OK));
+		await expect(hold.down(() => undefined, () => Promise.resolve(REFUSED))).resolves.toBe(REFUSED);
+		c.advance(900);
+		await expect(
+			hold.up({
+				...releaseDefaults(),
+				waitForChange,
+				toggleBack,
+			}),
+		).resolves.toMatchObject({ toggledBack: false });
+		expect(waitForChange).not.toHaveBeenCalled();
+		expect(toggleBack).not.toHaveBeenCalled();
+	});
+
+	it("keeps an unknown-state tap as a single toggle with no release toggle-back", async () => {
+		const c = clock();
+		const hold = new HoldToggle(400, c.now);
+		const waitForChange = vi.fn(() => Promise.resolve(true));
+		const toggleBack = vi.fn(() => Promise.resolve(OK));
+		await expect(hold.down(() => undefined, () => Promise.resolve(OK))).resolves.toBe(OK);
+		c.advance(120);
+		await expect(
+			hold.up({
+				...releaseDefaults(),
+				waitForChange,
+				toggleBack,
+			}),
+		).resolves.toMatchObject({ toggledBack: false });
+		expect(waitForChange).not.toHaveBeenCalled();
+		expect(toggleBack).not.toHaveBeenCalled();
 	});
 
 	it("ignores a release with no matching press", async () => {
@@ -259,6 +305,41 @@ describe("HoldToggle", () => {
 		expect(presses).toBe(0);
 
 		flip.resolve(true);
+		await Promise.resolve();
+		expect(reads).toBe(0);
+		expect(presses).toBe(0);
+
+		toggleBack.resolve(OK);
+		await expect(firstRelease).resolves.toMatchObject({ toggledBack: true, result: OK });
+		await expect(secondDown).resolves.toBe(OK);
+		expect(reads).toBe(1);
+		expect(presses).toBe(1);
+	});
+
+	it("serializes the next hold until an unknown-state hold finishes toggling back", async () => {
+		const c = clock();
+		const hold = new HoldToggle(400, c.now);
+		await hold.down(() => undefined, () => Promise.resolve(OK));
+		c.advance(900);
+
+		const toggleBack = deferred<RequestResult>();
+		const firstRelease = hold.up({
+			...releaseDefaults(),
+			toggleBack: () => toggleBack.promise,
+		});
+
+		let reads = 0;
+		let presses = 0;
+		const secondDown = hold.down(
+			() => {
+				reads++;
+				return undefined;
+			},
+			() => {
+				presses++;
+				return Promise.resolve(OK);
+			},
+		);
 		await Promise.resolve();
 		expect(reads).toBe(0);
 		expect(presses).toBe(0);

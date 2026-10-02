@@ -33,7 +33,8 @@ async function waitForAppliedToggle({
 	timeoutWarning: string;
 }): Promise<boolean> {
 	const result = await press;
-	if (!result.ok || startMuted === undefined) return false;
+	if (!result.ok) return false;
+	if (startMuted === undefined) return true;
 
 	const muted = currentMuted();
 	if (muted !== undefined && muted !== startMuted) return true;
@@ -44,6 +45,11 @@ async function waitForAppliedToggle({
 	return false;
 }
 
+/**
+ * Returns whether a held mute release should restore the state that existed on key-down.
+ * With a known starting state, waits until Teams reports the first toggle applied. With
+ * an unknown starting state, a successful first press is enough: two toggles restore it.
+ */
 export async function resolveHoldRelease(options: {
 	startMuted: boolean | undefined;
 	press: Promise<RequestResult>;
@@ -101,7 +107,7 @@ export class HoldToggle {
 		return started.then(() => request);
 	}
 
-	/** Toggles back only after a hold, and only if the first toggle actually landed. */
+	/** Toggles back only after a hold, and only if the first toggle actually landed. Unknown state skips state waits. */
 	up({
 		currentMuted,
 		waitForChange,
