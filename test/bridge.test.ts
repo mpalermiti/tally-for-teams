@@ -209,8 +209,32 @@ describe("TeamsBridge", () => {
 			"teams-changed markers: hangup-button | horizontalEnd; control ids: hangup-button | share-button",
 		]);
 
+		latest().status({ "hangup-button": "Leave" }, changed);
+		await flushStatus();
+		expect(logs.filter((m) => m.includes("teams-changed markers"))).toHaveLength(1);
+
 		await vi.advanceTimersByTimeAsync(5_000);
 		expect(logs.filter((m) => m.includes("teams-changed markers"))).toHaveLength(1);
+	});
+
+	it("clears a pending teams-changed timer when the helper crashes", async () => {
+		vi.useFakeTimers();
+		const logs: string[] = [];
+		start({ now: () => Date.now(), log: (m) => logs.push(m) });
+		latest().status({ [BUTTON_IDS.mute]: "Mute mic" });
+		await flushStatus();
+
+		latest().status({ "hangup-button": "Leave" }, { markers: ["hangup-button", "horizontalEnd"], markerControlIds: ["hangup-button"] });
+		await flushStatus();
+		expect(vi.getTimerCount()).toBe(1);
+
+		latest().crash();
+		expect(bridge.snapshot.reason).toBe("starting");
+		expect(vi.getTimerCount()).toBe(1); // restart timer only; the teams-changed timer was cleared
+
+		await vi.advanceTimersByTimeAsync(3_000);
+		expect(bridge.snapshot.reason).toBe("starting");
+		expect(logs.filter((m) => m.includes("teams-changed markers"))).toEqual([]);
 	});
 
 	it("cancels a pending teams-changed timer when a normal status arrives", async () => {

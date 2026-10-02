@@ -143,6 +143,22 @@ describe("TeamsChangedDebouncer", () => {
 		expect(debounce.next(status({ "hangup-button": "Leave" }, { markers: ["hangup-button", "horizontalEnd"] })).reason).toBe("teams-changed");
 	});
 
+	it("keeps showing teams-changed when the marker set changes after the debounce fires", () => {
+		const c = clock();
+		const debounce = new TeamsChangedDebouncer(c.now);
+		debounce.next(status({ ...toolbar, "microphone-button": "Mute mic" }));
+
+		c.advance(500);
+		debounce.next(status({ "hangup-button": "Leave" }, { markers: ["hangup-button", "horizontalEnd"] }));
+		c.advance(3_000);
+		expect(debounce.next(status({ "hangup-button": "Leave" }, { markers: ["hangup-button", "horizontalEnd"] })).reason).toBe("teams-changed");
+
+		c.advance(100);
+		expect(debounce.next(status({ "hangup-button": "Leave" }, { markers: ["hangup-button", "horizontalMiddleEnd"] })).reason).toBe(
+			"teams-changed",
+		);
+	});
+
 	it("cancels the pending teams-changed state when the mic anchor comes back", () => {
 		const c = clock();
 		const debounce = new TeamsChangedDebouncer(c.now);

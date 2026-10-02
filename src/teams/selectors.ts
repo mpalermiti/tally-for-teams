@@ -224,7 +224,8 @@ export class TeamsChangedDebouncer {
 
 		const signature = teamsChangedSignature(status);
 		if (this.#pendingSince === undefined || signature !== this.#pendingSignature) {
-			this.#pendingSince = this.now();
+			const wasShowing = this.#pendingSince !== undefined && this.now() - this.#pendingSince >= this.debounceMs;
+			this.#pendingSince = wasShowing ? this.now() - this.debounceMs : this.now();
 			this.#pendingSignature = signature;
 		}
 		if (this.now() - this.#pendingSince >= this.debounceMs) return snapshot;
