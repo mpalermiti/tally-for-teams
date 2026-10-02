@@ -40,7 +40,7 @@ describe("site", () => {
 	});
 
 	it("serves a compact key strip on phones", () => {
-		expect(html).toContain('<source media="(max-width: 734px)" srcset="art/keys-compact.svg" width="720" height="420">');
+		expect(html).toContain('<source media="(max-width: 734px)" srcset="art/keys-compact.svg" width="720" height="640">');
 	});
 
 	it("runs no scripts (structured data for search engines is just JSON)", () => {
@@ -86,6 +86,15 @@ describe("site", () => {
 
 	it("downloads the latest release", () => {
 		expect(html).toContain('href="https://github.com/mpalermiti/tally-for-teams/releases/latest/download/Tally.streamDeckPlugin"');
+	});
+
+	it("markets v1.1 without adding external dependencies", () => {
+		expect(html).toContain("Ten keys. One rule.");
+		expect(html).toContain("Push to talk on any key.");
+		expect(html).toContain("One-click setup.");
+		expect(html).toContain("Never guesses.");
+		expect(html).toContain("Accept the bundled Tally profile");
+		expect(html.match(/<article>/g)?.length).toBe(6);
 	});
 
 	it("keeps the page neutral outside the key art", () => {

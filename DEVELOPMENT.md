@@ -122,8 +122,14 @@ items fall back to meeting-scoped memory. The built-in on-label defaults prefer 
 before the broader `blur`; off defaults are `no background effect` / `none`. Fallback memory resets
 when the meeting or Teams/helper process ends, not on a transient toolbar miss. The key stays neutral
 unless a reliable status-time blur state is added. When Teams still looks like a meeting but the
-mic anchor is missing, Tally reports "Teams changed" and the plugin log lists the control ids it saw
-in that Teams window, capped for readability. It never logs labels or window titles.
+mic anchor is missing, Tally reports "Teams changed", keys show a small `?`, and the Stream Deck+
+dial says "Teams changed" / "See README". The plugin log lists the control ids it saw in that Teams
+window, capped for readability. It never logs labels or window titles.
+
+For Teams in another language, keys can still press controls by id, but full state may stay neutral
+because the built-in label patterns are English. A `selectors.json` override can add localized label
+regexes for that machine without waiting for a release. Prefer narrow positive patterns and explicit
+negative patterns for anything that can read as stopped/off, especially recording and blur.
 
 ### Bundled profiles
 
