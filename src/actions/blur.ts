@@ -26,6 +26,8 @@ export interface BackgroundBlurDecision {
 	target: BackgroundBlurTarget;
 	/** Fallback memory to keep only when no reliable selected state is readable. */
 	memoryAfterSuccess: boolean;
+	/** Fallback memory to write if the chosen menu item is missing and nothing is pressed. */
+	memoryAfterMissingItem?: boolean;
 	reason: BackgroundBlurDecisionReason;
 }
 
@@ -67,6 +69,7 @@ function fallbackDecision(input: BackgroundBlurDecisionInput, reason?: Backgroun
 		return {
 			target: "off",
 			memoryAfterSuccess: false,
+			...(input.canPressOff ? {} : { memoryAfterMissingItem: false }),
 			reason: reason ?? (input.canPressOff ? "fallback-off" : "fallback-off-missing"),
 		};
 	}
@@ -76,7 +79,14 @@ function fallbackDecision(input: BackgroundBlurDecisionInput, reason?: Backgroun
 /** Mirrors the Swift bridge's Background blur toggle choice so the privacy-critical logic is unit-tested. */
 export function chooseBackgroundBlurTarget(input: BackgroundBlurDecisionInput): BackgroundBlurDecision {
 	if (input.hasReadableSelection) {
-		if (input.blurSelected === true) return { target: "off", memoryAfterSuccess: false, reason: "blur-selected" };
+		if (input.blurSelected === true) {
+			return {
+				target: "off",
+				memoryAfterSuccess: false,
+				...(input.canPressOff ? {} : { memoryAfterMissingItem: false }),
+				reason: "blur-selected",
+			};
+		}
 		if (input.offSelected === true) return { target: "on", memoryAfterSuccess: true, reason: "none-selected" };
 		return fallbackDecision(input, "readable-no-selection");
 	}

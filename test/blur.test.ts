@@ -81,7 +81,7 @@ describe("chooseBackgroundBlurTarget", () => {
 				canPressOff: false,
 				fallbackBlurTurnedOn: false,
 			}),
-		).toEqual({ target: "off", memoryAfterSuccess: false, reason: "blur-selected" });
+		).toEqual({ target: "off", memoryAfterSuccess: false, memoryAfterMissingItem: false, reason: "blur-selected" });
 	});
 
 	it("turns blur on when Teams reports no background effect is selected", () => {
@@ -149,6 +149,6 @@ describe("chooseBackgroundBlurTarget", () => {
 				canPressOff: false,
 				fallbackBlurTurnedOn: true,
 			}),
-		).toEqual({ target: "off", memoryAfterSuccess: false, reason: "fallback-off-missing" });
+		).toEqual({ target: "off", memoryAfterSuccess: false, memoryAfterMissingItem: false, reason: "fallback-off-missing" });
 	});
 });

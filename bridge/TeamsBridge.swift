@@ -156,7 +156,13 @@ enum BlurDecisionReason: String {
 struct BlurDecision {
 	let target: String
 	let memoryAfterSuccess: Bool
+	let memoryAfterMissingItem: Bool?
 	let reason: BlurDecisionReason
+}
+
+enum MenuEscapeIfNoFreshItems: String {
+	case always
+	case ifExpanded
 }
 
 func windows(of app: AXUIElement) -> [AXUIElement] {
@@ -539,10 +545,10 @@ func chooseBackgroundBlurTarget(
 ) -> BlurDecision {
 	if hasReadableSelection {
 		if blurSelected == true {
-			return BlurDecision(target: "off", memoryAfterSuccess: false, reason: .blurSelected)
+			return BlurDecision(target: "off", memoryAfterSuccess: false, memoryAfterMissingItem: canPressOff ? nil : false, reason: .blurSelected)
 		}
 		if offSelected == true {
-			return BlurDecision(target: "on", memoryAfterSuccess: true, reason: .noneSelected)
+			return BlurDecision(target: "on", memoryAfterSuccess: true, memoryAfterMissingItem: nil, reason: .noneSelected)
 		}
 		return fallbackBackgroundBlurDecision(canPressOff: canPressOff, fallbackBlurTurnedOn: fallbackBlurTurnedOn, reason: .readableNoSelection)
 	}
@@ -552,9 +558,14 @@ func chooseBackgroundBlurTarget(
 
 func fallbackBackgroundBlurDecision(canPressOff: Bool, fallbackBlurTurnedOn: Bool, reason: BlurDecisionReason? = nil) -> BlurDecision {
 	if fallbackBlurTurnedOn {
-		return BlurDecision(target: "off", memoryAfterSuccess: false, reason: reason ?? (canPressOff ? .fallbackOff : .fallbackOffMissing))
+		return BlurDecision(
+			target: "off",
+			memoryAfterSuccess: false,
+			memoryAfterMissingItem: canPressOff ? nil : false,
+			reason: reason ?? (canPressOff ? .fallbackOff : .fallbackOffMissing)
+		)
 	}
-	return BlurDecision(target: "on", memoryAfterSuccess: true, reason: reason ?? .fallbackOn)
+	return BlurDecision(target: "on", memoryAfterSuccess: true, memoryAfterMissingItem: nil, reason: reason ?? .fallbackOn)
 }
 
 func stateText(_ state: Bool?) -> String {
@@ -578,7 +589,15 @@ func blurSelectionDescription(
 /// falling back to configured labels. Controls that existed before opening are ignored, so a chat
 /// message's "Like" can never match. Background blur passes `toggle` so the choice is made from
 /// the open Teams menu's current selected state rather than plugin memory.
-func menu(_ id: String, itemIds: [String], labels: [String], excludeLabels: [String], toggle: [String: Any]? = nil, req: Any?) {
+func menu(
+	_ id: String,
+	itemIds: [String],
+	labels: [String],
+	excludeLabels: [String],
+	toggle: [String: Any]? = nil,
+	escapeIfNoFreshItems: MenuEscapeIfNoFreshItems = .always,
+	req: Any?
+) {
 	guard AXIsProcessTrusted() else { return result(req, false, "Accessibility permission is off") }
 	guard let app = axApp else { return result(req, false, "Teams isn't running") }
 	guard let button = element(for: id) else { return result(req, false, "No \(id) on screen") }
@@ -621,14 +640,20 @@ func menu(_ id: String, itemIds: [String], labels: [String], excludeLabels: [Str
 			canPressOff: offItem != nil,
 			fallbackBlurTurnedOn: fallbackBlurTurnedOnMenus.contains(id)
 		)
-		if decision.reason == .fallbackOffMissing { fallbackBlurTurnedOnMenus.remove(id) }
 		if decision.target == "off" && offItem == nil {
 			Thread.sleep(forTimeInterval: 0.1)
 			refreshFreshItems()
 		}
 		let chosen = decision.target == "off" ? offItem : onItem
 		guard let chosen else {
-			closeMenu(app, items: fresh, button: button)
+			if let memoryAfterMissingItem = decision.memoryAfterMissingItem {
+				if memoryAfterMissingItem {
+					fallbackBlurTurnedOnMenus.insert(id)
+				} else {
+					fallbackBlurTurnedOnMenus.remove(id)
+				}
+			}
+			closeMenu(app, items: fresh, button: button, escapeIfNoFreshItems: escapeIfNoFreshItems)
 			let missing = decision.target == "off" ? "'No background effect'" : "Background blur"
 			return result(req, false, "No \(missing) item in \(id) menu; it offered: \(offeredDescription(fresh))")
 		}
@@ -650,14 +675,14 @@ func menu(_ id: String, itemIds: [String], labels: [String], excludeLabels: [Str
 			hasReadableSelection: hasReadableSelection
 		)
 		Thread.sleep(forTimeInterval: 0.3)
-		closeMenu(app, items: fresh, button: button)
+		closeMenu(app, items: fresh, button: button, escapeIfNoFreshItems: escapeIfNoFreshItems)
 		result(req, error == .success, error == .success ? "pressed \(pressedLabel); selection: \(seen)" : "AXError \(error.rawValue); selection: \(seen)", extra: extra)
 		DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: poll)
 		return
 	}
 
 	guard let item else {
-		closeMenu(app, items: fresh, button: button)
+		closeMenu(app, items: fresh, button: button, escapeIfNoFreshItems: escapeIfNoFreshItems)
 		return result(req, false, "No \(itemIds.first ?? labels.first ?? "item") in \(id) menu; it offered: \(offeredDescription(fresh))")
 	}
 	let error = AXUIElementPerformAction(item.element, kAXPressAction as CFString)
@@ -665,14 +690,19 @@ func menu(_ id: String, itemIds: [String], labels: [String], excludeLabels: [Str
 	var extra: [String: Any] = [:]
 	if let selected = item.state { extra["selected"] = selected }
 	Thread.sleep(forTimeInterval: 0.3)
-	closeMenu(app, items: fresh, button: button)
+	closeMenu(app, items: fresh, button: button, escapeIfNoFreshItems: escapeIfNoFreshItems)
 	result(req, error == .success, error == .success ? "pressed \(pressedLabel)" : "AXError \(error.rawValue)", extra: extra)
 	DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: poll)
 }
 
 /// Closes a menu left open. On Teams 26267, pressing React again does NOT close its menu but
 /// Escape does, so Escape goes first; pressing the button again is the fallback.
-func closeMenu(_ app: AXUIElement, items: [AXUIElement], button: AXUIElement) {
+func closeMenu(
+	_ app: AXUIElement,
+	items: [AXUIElement],
+	button: AXUIElement,
+	escapeIfNoFreshItems: MenuEscapeIfNoFreshItems = .always
+) {
 	func escape() {
 		for down in [true, false] { CGEvent(keyboardEventSource: nil, virtualKey: 0x35, keyDown: down)?.postToPid(appPID) }
 		Thread.sleep(forTimeInterval: 0.3)
@@ -685,7 +715,12 @@ func closeMenu(_ app: AXUIElement, items: [AXUIElement], button: AXUIElement) {
 		return items.contains { item in now.contains { CFEqual($0, item) } }
 	}
 	if items.isEmpty {
-		if menuExpanded() != false { escape() }
+		switch escapeIfNoFreshItems {
+		case .always:
+			escape()
+		case .ifExpanded:
+			if menuExpanded() == true { escape() }
+		}
 		return
 	}
 	guard stillOpen() else { return }
@@ -729,6 +764,7 @@ func handle(_ line: String) {
 			labels: message["labels"] as? [String] ?? [],
 			excludeLabels: message["excludeLabels"] as? [String] ?? [],
 			toggle: message["toggle"] as? [String: Any],
+			escapeIfNoFreshItems: MenuEscapeIfNoFreshItems(rawValue: message["escapeIfNoFreshItems"] as? String ?? "") ?? .always,
 			req: message["req"]
 		)
 	case "prompt":

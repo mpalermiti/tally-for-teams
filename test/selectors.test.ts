@@ -368,6 +368,7 @@ describe("commandFor", () => {
 		expect(commandFor("set-background-blur", {})).toEqual({
 			cmd: "menu",
 			id: "video-button-configure",
+			escapeIfNoFreshItems: "ifExpanded",
 			toggle: {
 				on: { itemIds: [], labels: ["standard blur", "blur"], excludeLabels: ["no background effect", "none"] },
 				off: { itemIds: [], labels: ["no background effect", "none"], excludeLabels: [] },
@@ -380,10 +381,24 @@ describe("commandFor", () => {
 			cmd: "menu",
 			id: BUTTON_IDS.react,
 			itemIds: ["heart-button"],
+			escapeIfNoFreshItems: "always",
 		});
 		expect(commandFor("send-reaction", { type: "wow" })).toMatchObject({ itemIds: ["surprised-button"] });
 		expect(commandFor("send-reaction", {})).toMatchObject({ itemIds: ["like-button"] });
-		expect(commandFor("toggle-hand", {})).toMatchObject({ cmd: "menu", id: BUTTON_IDS.react, itemIds: ["raisehands-button"] });
+		expect(commandFor("toggle-hand", {})).toMatchObject({
+			cmd: "menu",
+			id: BUTTON_IDS.react,
+			itemIds: ["raisehands-button"],
+			escapeIfNoFreshItems: "always",
+		});
+	});
+
+	it("uses AXExpanded-gated Escape for Background blur because video options belongs to Teams, not React", () => {
+		expect(commandFor("set-background-blur", {})).toMatchObject({
+			cmd: "menu",
+			id: "video-button-configure",
+			escapeIfNoFreshItems: "ifExpanded",
+		});
 	});
 
 	it("keeps label fallbacks in case Teams renames the item ids", () => {

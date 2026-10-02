@@ -42,6 +42,8 @@ export interface BridgeMenuTarget {
 	excludeLabels?: readonly string[];
 }
 
+export type MenuEscapeMode = "always" | "ifExpanded";
+
 export interface SelectorConfig {
 	buttonIds: Record<ButtonKey, string>;
 	plainIds: readonly string[];
@@ -159,7 +161,7 @@ export interface BridgeIndicator {
 
 export type BridgeCommand =
 	| { cmd: "press"; id: string }
-	| ({ cmd: "menu"; id: string } & (
+	| ({ cmd: "menu"; id: string; escapeIfNoFreshItems?: MenuEscapeMode } & (
 			| BridgeMenuTarget
 			| {
 					toggle: {
@@ -340,6 +342,7 @@ export function commandFor(
 			return {
 				cmd: "menu",
 				id: selectors.buttonIds.blur,
+				escapeIfNoFreshItems: "ifExpanded",
 				toggle: {
 					on: menuTarget(selectors.blur.on),
 					off: menuTarget(selectors.blur.off),
@@ -355,10 +358,16 @@ export function commandFor(
 			return { cmd: "press", id: selectors.buttonIds.share }; // While presenting, the share button reads "Stop sharing" and stops it (confirmed live).
 		case "send-reaction": {
 			const item = selectors.reactionItems[(type as Reaction) ?? "like"] ?? selectors.reactionItems.like;
-			return { cmd: "menu", id: selectors.buttonIds.react, itemIds: [item.id], labels: item.labels };
+			return { cmd: "menu", id: selectors.buttonIds.react, itemIds: [item.id], labels: item.labels, escapeIfNoFreshItems: "always" };
 		}
 		case "toggle-hand":
-			return { cmd: "menu", id: selectors.buttonIds.react, itemIds: [selectors.handItem.id], labels: selectors.handItem.labels };
+			return {
+				cmd: "menu",
+				id: selectors.buttonIds.react,
+				itemIds: [selectors.handItem.id],
+				labels: selectors.handItem.labels,
+				escapeIfNoFreshItems: "always",
+			};
 		case "query-state":
 			return { unsupported: "Not needed: the bridge reports state continuously" };
 	}
