@@ -16,7 +16,7 @@
 // Grant it in System Settings → Privacy & Security → Accessibility, then run again.
 //
 // Teams (WebView2) hides its accessibility tree until asked. The probe flips the same
-// switch VoiceOver uses (AXEnhancedUserInterface) and turns it back off when it exits.
+// switch VoiceOver uses (AXEnhancedUserInterface) and leaves it on when it exits.
 //
 // Privacy: only buttons, toggles and similar controls are ever read — never messages,
 // chat rows, text or window titles. By default only the meeting toolbar (the controls
@@ -231,11 +231,11 @@ func frontmostName() -> String { NSWorkspace.shared.frontmostApplication?.locali
 
 // WebView2 builds its tree only for assistive tech. VoiceOver's switch works (the call reports
 // an error, but the tree appears); Electron's AXManualAccessibility does not, so we don't try it.
-let enhancedBefore = (value(axApp, "AXEnhancedUserInterface") as? NSNumber)?.boolValue ?? false
 AXUIElementSetAttributeValue(axApp, "AXEnhancedUserInterface" as CFString, kCFBooleanTrue)
-func restoreEnhanced() {
-	if !enhancedBefore { AXUIElementSetAttributeValue(axApp, "AXEnhancedUserInterface" as CFString, kCFBooleanFalse) }
-}
+// Leave Teams' accessibility mode on when we exit. Teams reports it as off even while Tally or
+// VoiceOver has it on, so "restoring" it would switch it off under them and their presses would
+// silently stop working.
+func restoreEnhanced() {}
 
 /// Scans until the mic button appears or the tree stops growing (it builds asynchronously).
 func settledScan(timeout: TimeInterval = 8) -> Scan {

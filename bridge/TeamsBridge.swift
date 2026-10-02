@@ -278,6 +278,35 @@ func disableTree() {
 	if let axApp { AXUIElementSetAttributeValue(axApp, "AXEnhancedUserInterface" as CFString, kCFBooleanFalse) }
 }
 
+/// Whether Teams currently lets us press this element. Unknown counts as yes, so we never get in the way.
+func canPress(_ element: AXUIElement) -> Bool {
+	var names: CFArray?
+	guard AXUIElementCopyActionNames(element, &names) == .success, let list = names as? [String] else { return true }
+	return list.contains(kAXPressAction as String)
+}
+
+/// If something turns Teams' accessibility mode off while we run (VoiceOver quitting, another
+/// tool, a probe), Teams keeps showing its buttons but drops their press action, so presses
+/// silently do nothing. Turn the mode back on, at most every few seconds.
+var lastTreeRepair = Date.distantPast
+func repairTreeIfNeeded(_ element: AXUIElement) {
+	guard !canPress(element), let app = axApp, Date().timeIntervalSince(lastTreeRepair) > 5 else { return }
+	lastTreeRepair = Date()
+	enableTree(app)
+	log("Teams' accessibility mode was off; turned it back on")
+}
+
+/// Makes sure `element` can be pressed, repairing Teams' accessibility mode if needed; waits up to 1 s.
+func ensurePressable(_ element: AXUIElement) -> Bool {
+	if canPress(element) { return true }
+	repairTreeIfNeeded(element)
+	for _ in 0..<10 {
+		Thread.sleep(forTimeInterval: 0.1)
+		if canPress(element) { return true }
+	}
+	return false
+}
+
 /// Full scan for the watched ids. A meeting can have two windows (the full one and a compact
 /// view) that come and go, so every id is taken from the one window holding the anchor and the
 /// most of them; mixing the two would compare buttons from different toolbars.
@@ -409,6 +438,7 @@ func poll() {
 				markers = meetingMarkers
 				markerControlIds = markers.isEmpty ? [] : meetingMarkerControlIDs
 			}
+			if let anchor = cache[anchorID], buttons[anchorID] != nil { repairTreeIfNeeded(anchor) }
 		}
 	} else if !trusted || teamsApp() == nil {
 		appPID = 0
@@ -469,7 +499,16 @@ func element(for id: String) -> AXUIElement? {
 func press(_ id: String, req: Any?) {
 	guard AXIsProcessTrusted() else { return result(req, false, "Accessibility permission is off") }
 	guard axApp != nil else { return result(req, false, "Teams isn't running") }
-	guard let button = element(for: id) else { return result(req, false, "No \(id) on screen") }
+	guard var button = element(for: id) else { return result(req, false, "No \(id) on screen") }
+	var pressable = ensurePressable(button)
+	if !pressable, let app = axApp {
+		discover(app)
+		if let fresh = cache[id] {
+			button = fresh
+			pressable = ensurePressable(button)
+		}
+	}
+	guard pressable else { return result(req, false, "No AXPress action for \(id)") }
 	let error = AXUIElementPerformAction(button, kAXPressAction as CFString)
 	result(req, error == .success, error == .success ? "pressed" : "AXError \(error.rawValue)")
 	// Pick up the new label promptly instead of waiting for the next tick.
@@ -601,6 +640,7 @@ func menu(
 	guard AXIsProcessTrusted() else { return result(req, false, "Accessibility permission is off") }
 	guard let app = axApp else { return result(req, false, "Teams isn't running") }
 	guard let button = element(for: id) else { return result(req, false, "No \(id) on screen") }
+	guard ensurePressable(button) else { return result(req, false, "No AXPress action for \(id)") }
 
 	let before = controls(in: app)
 	let opened = AXUIElementPerformAction(button, kAXPressAction as CFString)
@@ -726,9 +766,13 @@ func closeMenu(
 	guard stillOpen() else { return }
 	escape()
 	if stillOpen() {
-		AXUIElementPerformAction(button, kAXPressAction as CFString)
-		Thread.sleep(forTimeInterval: 0.3)
-		log(stillOpen() ? "menu stayed open after Escape and re-press" : "menu closed by re-press (Escape didn't)")
+		if ensurePressable(button) {
+			AXUIElementPerformAction(button, kAXPressAction as CFString)
+			Thread.sleep(forTimeInterval: 0.3)
+			log(stillOpen() ? "menu stayed open after Escape and re-press" : "menu closed by re-press (Escape didn't)")
+		} else {
+			log("menu stayed open after Escape; toolbar button had no AXPress action")
+		}
 	}
 }
 

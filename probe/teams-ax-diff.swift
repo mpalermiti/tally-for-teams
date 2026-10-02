@@ -53,11 +53,11 @@ func text(_ element: AXUIElement, _ attribute: String, limit: Int = 80) -> Strin
 }
 
 // Same switch VoiceOver sets; Teams builds its accessibility tree only while it's on.
-let enhancedBefore = (value(axApp, "AXEnhancedUserInterface") as? NSNumber)?.boolValue ?? false
 AXUIElementSetAttributeValue(axApp, "AXEnhancedUserInterface" as CFString, kCFBooleanTrue)
-func restore() {
-	if !enhancedBefore { AXUIElementSetAttributeValue(axApp, "AXEnhancedUserInterface" as CFString, kCFBooleanFalse) }
-}
+// Leave Teams' accessibility mode on when we exit. Teams reports it as off even while Tally or
+// VoiceOver has it on, so "restoring" it would switch it off under them and their presses would
+// silently stop working.
+func restore() {}
 signal(SIGINT, SIG_IGN)
 let interrupt = DispatchSource.makeSignalSource(signal: SIGINT)
 interrupt.setEventHandler { restore(); exit(0) }
