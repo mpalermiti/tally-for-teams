@@ -70,6 +70,10 @@ export function shouldHoldToLeave({
 	return Boolean(holdToLeave && !isInMultiAction && teamsOnline);
 }
 
+export function shouldHoldMuteKey({ isInMultiAction }: { isInMultiAction?: boolean }): boolean {
+	return !isInMultiAction;
+}
+
 /**
  * A press that only counts once held for `holdMs`, so a tap can't do something drastic.
  * The caller polls `progress` to animate and `fire()` to act; `release()` says whether

@@ -11,36 +11,57 @@ import {
 } from "@elgato/streamdeck";
 
 import { muteDialFeedback } from "../render/key";
-import { HOLD_TO_LEAVE_MS, HoldToConfirm, HoldToggle, RotateToggle, shouldHoldToLeave } from "./gestures";
+import { HOLD_TO_LEAVE_MS, HoldToConfirm, HoldToggle, RotateToggle, shouldHoldMuteKey, shouldHoldToLeave } from "./gestures";
 import { TeamsKey, type KeySettings } from "./teams-key";
 
 // One class per key: Stream Deck identifies actions by UUID, and each UUID needs its own decorated class.
 // UUIDs must match ai.michaelp.tally.sdPlugin/manifest.json.
 
 /**
- * Mute works on a key or a Stream Deck+ dial. On a dial: tap toggles, hold flips
- * the mic only while held (push-to-talk / cough button), turn right to unmute and
- * left to mute, touch the strip to toggle.
+ * Mute works on a key or a Stream Deck+ dial. Tap toggles; hold flips the mic only
+ * while held (push-to-talk / cough button). Dials can also turn right to unmute,
+ * left to mute, and touch the strip to toggle.
  */
 @action({ UUID: "ai.michaelp.tally.mute" })
 export class MuteKey extends TeamsKey {
 	readonly kind = "mute";
 	protected press = () => this.teams.request("toggle-mute");
 
-	#hold = new HoldToggle();
+	#dialHold = new HoldToggle();
+	#keyHolds = new Map<string, HoldToggle>();
 	#rotate = new RotateToggle();
 
 	protected override dialFeedback() {
 		return muteDialFeedback(this.teams.snapshot);
 	}
 
+	override onKeyDown(ev: KeyDownEvent<KeySettings>): Promise<void> {
+		if (!shouldHoldMuteKey({ isInMultiAction: ev.payload.isInMultiAction })) return super.onKeyDown(ev);
+		const hold = new HoldToggle();
+		hold.down(this.#muted);
+		this.#keyHolds.set(ev.action.id, hold);
+		return this.perform(ev.action, this.press());
+	}
+
+	override async onKeyUp(ev: KeyUpEvent<KeySettings>): Promise<void> {
+		const hold = this.#keyHolds.get(ev.action.id);
+		if (!hold) return;
+		this.#keyHolds.delete(ev.action.id);
+		if (hold.up(this.#muted)) await this.perform(ev.action, this.press());
+	}
+
+	override onWillDisappear(ev: WillDisappearEvent<KeySettings>): void {
+		this.#keyHolds.delete(ev.action.id);
+		super.onWillDisappear(ev);
+	}
+
 	override onDialDown(ev: DialDownEvent<KeySettings>): Promise<void> {
-		this.#hold.down(this.#muted);
+		this.#dialHold.down(this.#muted);
 		return this.perform(ev.action, this.press());
 	}
 
 	override async onDialUp(ev: DialUpEvent<KeySettings>): Promise<void> {
-		if (this.#hold.up(this.#muted)) await this.perform(ev.action, this.press());
+		if (this.#dialHold.up(this.#muted)) await this.perform(ev.action, this.press());
 	}
 
 	override async onDialRotate(ev: DialRotateEvent<KeySettings>): Promise<void> {

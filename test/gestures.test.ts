@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { HoldToConfirm, HoldToggle, RotateToggle, shouldHoldToLeave } from "../src/actions/gestures";
+import { HoldToConfirm, HoldToggle, RotateToggle, shouldHoldMuteKey, shouldHoldToLeave } from "../src/actions/gestures";
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -113,6 +113,14 @@ describe("shouldHoldToLeave", () => {
 		expect(shouldHoldToLeave({ holdToLeave: false, isInMultiAction: false, teamsOnline: true })).toBe(false);
 		expect(shouldHoldToLeave({ holdToLeave: true, isInMultiAction: true, teamsOnline: true })).toBe(false);
 		expect(shouldHoldToLeave({ holdToLeave: true, isInMultiAction: false, teamsOnline: false })).toBe(false);
+	});
+});
+
+describe("shouldHoldMuteKey", () => {
+	it("allows hold-to-talk on ordinary Mute keys, but not inside multi-actions", () => {
+		expect(shouldHoldMuteKey({ isInMultiAction: false })).toBe(true);
+		expect(shouldHoldMuteKey({})).toBe(true);
+		expect(shouldHoldMuteKey({ isInMultiAction: true })).toBe(false);
 	});
 });
 

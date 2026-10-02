@@ -28,7 +28,7 @@
 			"Name": "Mute",
 			"UUID": "ai.michaelp.tally.mute",
 			"Icon": "imgs/actions/mute/icon",
-			"Tooltip": "Toggle your microphone. Lit while your mic is live. On a Stream Deck+ dial: hold to talk, turn to mute or unmute.",
+			"Tooltip": "Toggle your microphone. Lit while your mic is live. Hold to talk while muted. On a Stream Deck+ dial: turn to mute or unmute.",
 			"Controllers": [
 				"Keypad",
 				"Encoder"

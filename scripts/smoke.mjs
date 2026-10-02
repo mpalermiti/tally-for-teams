@@ -144,6 +144,36 @@ try {
 	await until(() => lastImage("MUTE1").includes('fill="#18181B"') && !lastImage("MUTE1").includes("radialGradient"), "mute key goes dark when the label flips to Unmute mic");
 	check(alerts("MUTE1") === 1, "no alert on a successful press");
 
+	// Mute key: hold to talk / cough button.
+	let presses = commands("press").length;
+	event("keyDown", "mute", "MUTE1", keyPayload());
+	await until(() => commands("press").length === presses + 1, "pressing the mute key presses mute immediately");
+	pressMic(true);
+	await until(() => lastImage("MUTE1").includes("radialGradient"), "mute key lights while held");
+	await sleep(500);
+	event("keyUp", "mute", "MUTE1", keyPayload());
+	await until(() => commands("press").length === presses + 2, "releasing the mute key after a hold mutes again (push-to-talk)");
+	pressMic(false);
+	await until(() => !lastImage("MUTE1").includes("radialGradient"), "mute key returns to muted after hold release");
+
+	presses = commands("press").length;
+	event("keyDown", "mute", "MUTE1", keyPayload());
+	await until(() => commands("press").length === presses + 1, "a quick mute-key tap toggles immediately");
+	pressMic(true);
+	event("keyUp", "mute", "MUTE1", keyPayload());
+	await sleep(500);
+	check(commands("press").length === presses + 1, "a quick mute-key tap doesn't toggle back on release");
+
+	presses = commands("press").length;
+	const multiActionMute = { ...keyPayload(), isInMultiAction: true };
+	event("keyDown", "mute", "MUTE1", multiActionMute);
+	await until(() => commands("press").length === presses + 1, "mute key in a multi-action toggles on key down");
+	pressMic(false);
+	await sleep(500);
+	event("keyUp", "mute", "MUTE1", multiActionMute);
+	await sleep(300);
+	check(commands("press").length === presses + 1, "mute key in a multi-action doesn't toggle back");
+
 	// Reactions go through the React menu.
 	event("keyDown", "react", "REACT1", keyPayload({ reaction: "love" }));
 	await until(() => commands("menu").length === 1, "react key opens the React menu");
@@ -193,7 +223,7 @@ try {
 	event("keyUp", "leave", "LEAVE2", multiActionLeave);
 
 	// Stream Deck+ dial: hold to talk.
-	let presses = commands("press").length;
+	presses = commands("press").length;
 	event("dialDown", "mute", "DIAL1", dialPayload);
 	await until(() => commands("press").length === presses + 1, "pressing the dial presses mute immediately");
 	pressMic(true);
