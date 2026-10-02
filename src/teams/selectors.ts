@@ -23,7 +23,7 @@ import {
 
 export const TEAMS_BUNDLE_IDS = ["com.microsoft.teams2"];
 
-type ButtonKey = "mute" | "camera" | "share" | "react" | "chat" | "leave";
+type ButtonKey = "mute" | "camera" | "share" | "react" | "chat" | "leave" | "people";
 
 export interface MenuItemSelector {
 	id: string;
@@ -76,6 +76,7 @@ export const DEFAULT_SELECTORS = {
 		react: "reaction-menu-button",
 		chat: "chat-button",
 		leave: "hangup-button",
+		people: "roster-button",
 	},
 	plainIds: ["callingButtons-showMoreBtn", "roster-button", "chat-button"],
 	reactionItems: {
@@ -208,6 +209,7 @@ export function snapshotFrom(status: BridgeStatus, selectors: Selectors = DEFAUL
 			canReact: usable(selectors.buttonIds.react),
 			canToggleHand: usable(selectors.buttonIds.react) || usable(selectors.handItem.id),
 			canToggleChat: usable(selectors.buttonIds.chat),
+			canTogglePeople: usable(selectors.buttonIds.people),
 			canToggleShareTray: usable(selectors.buttonIds.share),
 			canStopSharing: usable(selectors.buttonIds.share) && sharing === true,
 		},
@@ -307,6 +309,8 @@ export function commandFor(
 			return { cmd: "press", id: selectors.buttonIds.leave };
 		case "toggle-ui":
 			return { cmd: "press", id: type === "chat" ? selectors.buttonIds.chat : selectors.buttonIds.share };
+		case "toggle-people":
+			return { cmd: "press", id: selectors.buttonIds.people };
 		case "stop-sharing":
 			return { cmd: "press", id: selectors.buttonIds.share }; // While presenting, the share button reads "Stop sharing" and stops it (confirmed live).
 		case "send-reaction": {

@@ -28,6 +28,7 @@ const toolbar = {
 	"share-button": "Share",
 	"reaction-menu-button": "React",
 	"chat-button": "Chat",
+	"roster-button": "People",
 	"hangup-button": "Leave",
 };
 
@@ -103,11 +104,13 @@ describe("snapshotFrom", () => {
 			canToggleHand: true, // raise hand lives in the React menu
 			canToggleChat: true,
 			canToggleShareTray: true,
+			canTogglePeople: true,
 		});
 
 		const narrow = snapshotFrom(status({ "microphone-button": "Mute mic", "hangup-button": "Leave" }));
 		expect(narrow.permissions.canToggleVideo).toBe(false);
 		expect(narrow.permissions.canReact).toBe(false);
+		expect(narrow.permissions.canTogglePeople).toBe(false);
 	});
 
 	it("treats a disabled button as unavailable", () => {
@@ -329,6 +332,7 @@ describe("commandFor", () => {
 		expect(commandFor("leave-call", {})).toEqual({ cmd: "press", id: BUTTON_IDS.leave });
 		expect(commandFor("toggle-ui", { type: "chat" })).toEqual({ cmd: "press", id: BUTTON_IDS.chat });
 		expect(commandFor("toggle-ui", { type: "sharing-tray" })).toEqual({ cmd: "press", id: BUTTON_IDS.share });
+		expect(commandFor("toggle-people", {})).toEqual({ cmd: "press", id: "roster-button" });
 	});
 
 	it("sends reactions and raises hands by pressing React-menu items by id", () => {

@@ -81,6 +81,11 @@ describe("visualFor", () => {
 		expect(visualFor("share", inMeeting({ isSharing: true }, { canToggleShareTray: false })).tone).toBe("on");
 	});
 
+	it("shows People as a ready action only when the roster button is available", () => {
+		expect(visualFor("people", inMeeting()).tone).toBe("ready");
+		expect(visualFor("people", inMeeting({}, { canTogglePeople: false })).tone).toBe("idle");
+	});
+
 	it("flags recording on the mic and camera keys only", () => {
 		const recording = inMeeting({ isRecording: true });
 		expect(visualFor("mute", recording).recording).toBe(true);

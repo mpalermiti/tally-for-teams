@@ -13,6 +13,7 @@ export type TeamsAction =
 	| "send-reaction"
 	| "toggle-ui"
 	| "stop-sharing"
+	| "toggle-people"
 	| "query-state";
 
 export type Reaction = "like" | "love" | "applause" | "laugh" | "wow";
@@ -63,6 +64,7 @@ export interface MeetingPermissions {
 	canReact: boolean;
 	canToggleShareTray: boolean;
 	canToggleChat: boolean;
+	canTogglePeople: boolean;
 	canStopSharing: boolean;
 	canPair: boolean;
 }
@@ -88,6 +90,7 @@ export const NO_PERMISSIONS: MeetingPermissions = {
 	canReact: false,
 	canToggleShareTray: false,
 	canToggleChat: false,
+	canTogglePeople: false,
 	canStopSharing: false,
 	canPair: false,
 };

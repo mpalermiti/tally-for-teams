@@ -156,6 +156,21 @@
 					"ShowTitle": false
 				}
 			]
+		},
+		{
+			"Name": "People",
+			"UUID": "ai.michaelp.tally.people",
+			"Icon": "imgs/actions/people/icon",
+			"Tooltip": "Open or close the participant list.",
+			"Controllers": [
+				"Keypad"
+			],
+			"States": [
+				{
+					"Image": "imgs/actions/people/key",
+					"ShowTitle": false
+				}
+			]
 		}
 	]
 }

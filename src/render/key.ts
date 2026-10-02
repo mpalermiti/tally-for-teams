@@ -17,7 +17,7 @@ import { GLYPHS, type GlyphName } from "./glyphs";
  */
 export type Tone = "offline" | "idle" | "off" | "ready" | "on" | "danger";
 
-export const KEY_KINDS = ["mute", "camera", "hand", "leave", "react", "chat", "share", "timer"] as const;
+export const KEY_KINDS = ["mute", "camera", "hand", "leave", "react", "chat", "share", "timer", "people"] as const;
 export type KeyKind = (typeof KEY_KINDS)[number];
 
 export interface Visual {
@@ -64,6 +64,7 @@ export function visualFor(kind: KeyKind, snapshot: Snapshot, options: { reaction
 			state.isSharingKnown ? state.isSharing || "action" : "action",
 		],
 		timer: ["timer", "timer", false, "action"],
+		people: ["users", "users", can.canTogglePeople, "action"],
 	};
 
 	const [onGlyph, offGlyph, available, current] = spec[kind];

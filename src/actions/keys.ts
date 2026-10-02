@@ -258,6 +258,12 @@ export class ShareKey extends TeamsKey {
 			: this.teams.request("toggle-ui", { type: "sharing-tray" });
 }
 
+@action({ UUID: "ai.michaelp.tally.people" })
+export class PeopleKey extends TeamsKey {
+	readonly kind = "people";
+	protected press = () => this.teams.request("toggle-people");
+}
+
 @action({ UUID: "ai.michaelp.tally.timer" })
 export class TimerKey extends SingletonAction<KeySettings> {
 	#drawn = new Map<string, string>();
