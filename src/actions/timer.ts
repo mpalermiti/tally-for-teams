@@ -20,7 +20,6 @@ export class MeetingTimer {
 				this.#sync(reading.elapsedSeconds);
 			} else if (reading.elapsedSeconds !== this.#lastReading) {
 				const current = this.currentSeconds();
-				if (current !== undefined && reading.elapsedSeconds <= current - 30) this.reset();
 				if (current === undefined || Math.abs(current - reading.elapsedSeconds) >= 2) this.#sync(reading.elapsedSeconds);
 			}
 			this.#lastReading = reading.elapsedSeconds;

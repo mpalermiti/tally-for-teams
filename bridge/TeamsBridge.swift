@@ -10,6 +10,8 @@
 //          {"cmd":"press","req":1,"id":"microphone-button"}
 //          {"cmd":"menu","req":2,"id":"reaction-menu-button","itemIds":["like-button"],"labels":["like"],"excludeLabels":["none"]}
 //                                                                                 open a menu, press the new item (id first, then label)
+//          {"cmd":"menu","req":3,"id":"video-button-configure","toggle":{"on":{"itemIds":[],"labels":["standard blur","blur"],"excludeLabels":["no background effect","none"]},"off":{"itemIds":[],"labels":["no background effect","none"]}}}
+//                                                                                 open video options and choose blur on/off from fresh selected state
 //          {"cmd":"prompt"}                                                       show macOS's Accessibility permission prompt
 //   stdout {"type":"status","trusted":true,"running":true,"indicators":[{"id":"call-duration-custom","role":"AXTimeGroup","label":"Elapsed time 00:34"}],"markers":["hangup-button"],"markerControlIds":["hangup-button"],"buttons":{"microphone-button":{"label":"Mute mic","enabled":true,"style":"fui-Button …"}}}
 //          {"type":"result","req":1,"ok":true,"message":"pressed"}
@@ -42,6 +44,9 @@ func value(_ element: AXUIElement, _ attribute: String) -> AnyObject? {
 func string(_ element: AXUIElement, _ attribute: String) -> String? {
 	(value(element, attribute) as? String).flatMap { $0.isEmpty ? nil : $0 }
 }
+func rawString(_ element: AXUIElement, _ attribute: String) -> String? {
+	value(element, attribute) as? String
+}
 func bool(_ element: AXUIElement, _ attribute: String) -> Bool? {
 	guard let raw = value(element, attribute) else { return nil }
 	if let number = raw as? NSNumber { return number.boolValue }
@@ -65,6 +70,42 @@ func style(_ element: AXUIElement) -> String? {
 	(value(element, "AXDOMClassList") as? [String]).flatMap { $0.isEmpty ? nil : $0.joined(separator: " ") }
 }
 
+func position(_ element: AXUIElement) -> CGPoint? {
+	guard let raw = value(element, kAXPositionAttribute) else { return nil }
+	guard CFGetTypeID(raw) == AXValueGetTypeID() else { return nil }
+	let axValue = raw as! AXValue
+	guard AXValueGetType(axValue) == .cgPoint else { return nil }
+	var point = CGPoint.zero
+	return AXValueGetValue(axValue, .cgPoint, &point) ? point : nil
+}
+
+func boolLike(_ raw: AnyObject?) -> Bool? {
+	guard let raw else { return nil }
+	if let number = raw as? NSNumber { return number.boolValue }
+	if let bool = raw as? Bool { return bool }
+	if let string = raw as? String {
+		switch string.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+		case "true", "1", "yes", "on", "checked", "mixed":
+			return true
+		case "false", "0", "no", "off", "unchecked":
+			return false
+		default:
+			return nil
+		}
+	}
+	return nil
+}
+
+func selectedState(_ element: AXUIElement) -> Bool? {
+	for attribute in ["AXSelected", kAXValueAttribute, "AXChecked", "AXCheckedState", "AXARIAChecked", "AXAriaChecked", "AXDOMAriaChecked"] {
+		if let state = boolLike(value(element, attribute)) { return state }
+	}
+	if let mark = rawString(element, "AXMenuItemMarkChar") {
+		return !mark.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+	}
+	return nil
+}
+
 /// Only real controls. Teams also makes chat rows and messages pressable; never touch those.
 let controlRoles: Set<String> = [
 	"AXButton", "AXCheckBox", "AXRadioButton", "AXMenuButton", "AXPopUpButton", "AXMenuItem", "AXToggle", "AXSwitch",
@@ -72,6 +113,33 @@ let controlRoles: Set<String> = [
 let markerContainerRoles: Set<String> = ["AXToolbar", "AXGroup"]
 let indicatorRoles: Set<String> = ["AXButton", "AXGroup", "AXTimeGroup", "AXStaticText"]
 let textInputRoles: Set<String> = ["AXTextField", "AXTextArea", "AXSearchField", "AXComboBox"]
+
+struct MenuSelector {
+	let itemIds: [String]
+	let labels: [String]
+	let excludeLabels: [String]
+}
+
+struct MenuMatch {
+	let element: AXUIElement
+	let state: Bool?
+}
+
+enum BlurDecisionReason: String {
+	case blurSelected = "blur-selected"
+	case noneSelected = "none-selected"
+	case otherEffectSelected = "other-effect-selected"
+	case readableNoSelection = "readable-no-selection"
+	case fallbackOn = "fallback-on"
+	case fallbackOff = "fallback-off"
+	case fallbackOffMissing = "fallback-off-missing"
+}
+
+struct BlurDecision {
+	let target: String
+	let memoryAfterSuccess: Bool
+	let reason: BlurDecisionReason
+}
 
 func windows(of app: AXUIElement) -> [AXUIElement] {
 	(value(app, kAXWindowsAttribute) as? [AXUIElement]) ?? []
@@ -170,6 +238,7 @@ var lastDiscovery = Date.distantPast
 var lastStatus = ""
 var promptedThisSession = false
 var indicatorFastRediscoverySpent = false
+var fallbackBlurTurnedOnMenus = Set<String>()
 
 func teamsApp() -> NSRunningApplication? {
 	NSWorkspace.shared.runningApplications.first { bundleIDs.contains($0.bundleIdentifier ?? "") }
@@ -289,6 +358,7 @@ func poll() {
 			meetingMarkerControlIDs = []
 			lastDiscovery = .distantPast
 			indicatorFastRediscoverySpent = false
+			fallbackBlurTurnedOnMenus.removeAll()
 		}
 		if let app = axApp {
 			buttons = readButtons()
@@ -322,6 +392,11 @@ func poll() {
 		meetingMarkers = []
 		meetingMarkerControlIDs = []
 		indicatorFastRediscoverySpent = false
+		fallbackBlurTurnedOnMenus.removeAll()
+	}
+
+	if buttons[anchorID] == nil && markers.isEmpty {
+		fallbackBlurTurnedOnMenus.removeAll()
 	}
 
 	let status: [String: Any] = [
@@ -366,10 +441,121 @@ func press(_ id: String, req: Any?) {
 	DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: poll)
 }
 
+func menuSelector(from object: Any?) -> MenuSelector {
+	guard let dict = object as? [String: Any] else { return MenuSelector(itemIds: [], labels: [], excludeLabels: []) }
+	return MenuSelector(
+		itemIds: dict["itemIds"] as? [String] ?? [],
+		labels: dict["labels"] as? [String] ?? [],
+		excludeLabels: dict["excludeLabels"] as? [String] ?? []
+	)
+}
+
+func ordered(_ items: [AXUIElement]) -> [AXUIElement] {
+	items.enumerated().sorted { left, right in
+		let lp = position(left.element)
+		let rp = position(right.element)
+		if let lp, let rp {
+			if abs(lp.y - rp.y) > 1 { return lp.y < rp.y }
+			if abs(lp.x - rp.x) > 1 { return lp.x < rp.x }
+			return left.offset > right.offset
+		}
+		if lp != nil { return true }
+		if rp != nil { return false }
+		return left.offset > right.offset
+	}.map(\.element)
+}
+
+func matches(_ element: AXUIElement, selector: MenuSelector) -> Bool {
+	if let id = domID(element), selector.itemIds.contains(id) { return true }
+	guard let text = label(element)?.lowercased() else { return false }
+	if selector.excludeLabels.map({ $0.lowercased() }).contains(where: { text.contains($0) }) { return false }
+	return selector.labels.map { $0.lowercased() }.contains(where: { text.contains($0) })
+}
+
+func firstMatch(in items: [AXUIElement], selector: MenuSelector) -> MenuMatch? {
+	for id in selector.itemIds {
+		if let element = items.first(where: { domID($0) == id }) {
+			return MenuMatch(element: element, state: selectedState(element))
+		}
+	}
+	let excluded = selector.excludeLabels.map { $0.lowercased() }
+	for wanted in selector.labels.map({ $0.lowercased() }) {
+		if let element = items.first(where: { element in
+			guard let text = label(element)?.lowercased(), text.contains(wanted) else { return false }
+			return !excluded.contains(where: { text.contains($0) })
+		}) {
+			return MenuMatch(element: element, state: selectedState(element))
+		}
+	}
+	return nil
+}
+
+func offeredDescription(_ fresh: [AXUIElement]) -> String {
+	let offeredIds = fresh.compactMap { domID($0) }
+	let withoutIDCount = fresh.count - offeredIds.count
+	let offeredList = offeredIds.prefix(25).joined(separator: " | ")
+	if fresh.isEmpty { return "nothing" }
+	if offeredList.isEmpty { return "\(withoutIDCount) control\(withoutIDCount == 1 ? "" : "s") without id" }
+	if withoutIDCount == 0 { return offeredList }
+	return "\(offeredList) (+\(withoutIDCount) without id)"
+}
+
+func chooseBackgroundBlurTarget(
+	blurSelected: Bool?,
+	offSelected: Bool?,
+	otherEffectSelected: Bool,
+	hasReadableSelection: Bool,
+	canPressOn: Bool,
+	canPressOff: Bool,
+	fallbackBlurTurnedOn: Bool
+) -> BlurDecision {
+	if hasReadableSelection {
+		if blurSelected == true && canPressOff {
+			return BlurDecision(target: "off", memoryAfterSuccess: false, reason: .blurSelected)
+		}
+		if otherEffectSelected {
+			return BlurDecision(target: "on", memoryAfterSuccess: true, reason: .otherEffectSelected)
+		}
+		if offSelected == true {
+			return BlurDecision(target: "on", memoryAfterSuccess: true, reason: .noneSelected)
+		}
+		return BlurDecision(target: "on", memoryAfterSuccess: true, reason: .readableNoSelection)
+	}
+
+	if fallbackBlurTurnedOn {
+		if canPressOff {
+			return BlurDecision(target: "off", memoryAfterSuccess: false, reason: .fallbackOff)
+		}
+		return BlurDecision(target: "on", memoryAfterSuccess: false, reason: .fallbackOffMissing)
+	}
+
+	return BlurDecision(target: "on", memoryAfterSuccess: true, reason: .fallbackOn)
+}
+
+func stateText(_ state: Bool?) -> String {
+	guard let state else { return "unreadable" }
+	return state ? "selected" : "not selected"
+}
+
+func blurSelectionDescription(
+	decision: BlurDecision,
+	blurState: Bool?,
+	offState: Bool?,
+	otherEffectSelected: Bool,
+	hasReadableSelection: Bool
+) -> String {
+	if !hasReadableSelection {
+		return "unreadable (\(decision.reason.rawValue))"
+	}
+	let other = otherEffectSelected ? "another background effect selected" : "no other selected effect seen"
+	return "blur \(stateText(blurState)), off \(stateText(offState)), \(other) (\(decision.reason.rawValue))"
+}
+
 /// Opens a menu (e.g. React) and presses the item that appeared whose web id is in `itemIds`,
-/// falling back to one whose label contains a word from `labels`. Controls that existed before
-/// opening are ignored, so a chat message's "Like" can never match.
-func menu(_ id: String, itemIds: [String], labels: [String], excludeLabels: [String], req: Any?) {
+/// falling back to configured labels. Controls that existed before opening are ignored, so a chat
+/// message's "Like" can never match. Background blur passes `toggle` so the choice is made from
+/// the open Teams menu's current selected state rather than plugin memory.
+func menu(_ id: String, itemIds: [String], labels: [String], excludeLabels: [String], toggle: [String: Any]? = nil, req: Any?) {
 	guard AXIsProcessTrusted() else { return result(req, false, "Accessibility permission is off") }
 	guard let app = axApp else { return result(req, false, "Teams isn't running") }
 	guard let button = element(for: id) else { return result(req, false, "No \(id) on screen") }
@@ -378,44 +564,81 @@ func menu(_ id: String, itemIds: [String], labels: [String], excludeLabels: [Str
 	let opened = AXUIElementPerformAction(button, kAXPressAction as CFString)
 	guard opened == .success else { return result(req, false, "Couldn't open \(id): AXError \(opened.rawValue)") }
 
-	let wantedLabels = labels.map { $0.lowercased() }
-	let unwantedLabels = excludeLabels.map { $0.lowercased() }
-	func labelMatches(_ el: AXUIElement) -> Bool {
-		guard let text = label(el)?.lowercased() else { return false }
-		guard wantedLabels.contains(where: { text.contains($0) }) else { return false }
-		return !unwantedLabels.contains(where: { text.contains($0) })
-	}
 	var fresh: [AXUIElement] = []
-	var item: AXUIElement?
+	let selector = MenuSelector(itemIds: itemIds, labels: labels, excludeLabels: excludeLabels)
+	let onSelector = menuSelector(from: toggle?["on"])
+	let offSelector = menuSelector(from: toggle?["off"])
+	var item: MenuMatch?
+	var onItem: MenuMatch?
+	var offItem: MenuMatch?
 	let deadline = Date().addingTimeInterval(1.5)
-	while item == nil && Date() < deadline {
+	while Date() < deadline {
 		Thread.sleep(forTimeInterval: 0.1)
-		fresh = controls(in: app).filter { candidate in !before.contains { CFEqual($0, candidate) } }
-		item = fresh.first { domID($0).map(itemIds.contains) ?? false }
-			?? fresh.first(where: labelMatches)
+		fresh = ordered(controls(in: app).filter { candidate in !before.contains { CFEqual($0, candidate) } })
+		if toggle != nil {
+			onItem = firstMatch(in: fresh, selector: onSelector)
+			offItem = firstMatch(in: fresh, selector: offSelector)
+			if onItem != nil || offItem != nil { break }
+		} else {
+			item = firstMatch(in: fresh, selector: selector)
+			if item != nil { break }
+		}
+	}
+
+	if toggle != nil {
+		let hasReadableSelection = fresh.contains { selectedState($0) != nil }
+		let otherEffectSelected = fresh.contains { element in
+			guard selectedState(element) == true else { return false }
+			return !matches(element, selector: onSelector) && !matches(element, selector: offSelector)
+		}
+		let decision = chooseBackgroundBlurTarget(
+			blurSelected: onItem?.state,
+			offSelected: offItem?.state,
+			otherEffectSelected: otherEffectSelected,
+			hasReadableSelection: hasReadableSelection,
+			canPressOn: onItem != nil,
+			canPressOff: offItem != nil,
+			fallbackBlurTurnedOn: fallbackBlurTurnedOnMenus.contains(id)
+		)
+		if decision.reason == .fallbackOffMissing { fallbackBlurTurnedOnMenus.remove(id) }
+		let chosen = decision.target == "off" ? offItem : onItem
+		guard let chosen else {
+			closeMenu(app, items: fresh, button: button)
+			return result(req, false, "No \(decision.target) Background blur item in \(id) menu; it offered: \(offeredDescription(fresh))")
+		}
+		let error = AXUIElementPerformAction(chosen.element, kAXPressAction as CFString)
+		if error == .success {
+			if decision.memoryAfterSuccess {
+				fallbackBlurTurnedOnMenus.insert(id)
+			} else {
+				fallbackBlurTurnedOnMenus.remove(id)
+			}
+		}
+		let pressedLabel = label(chosen.element) ?? domID(chosen.element) ?? "item"
+		var extra: [String: Any] = [:]
+		if let state = chosen.state { extra["selected"] = state }
+		let seen = blurSelectionDescription(
+			decision: decision,
+			blurState: onItem?.state,
+			offState: offItem?.state,
+			otherEffectSelected: otherEffectSelected,
+			hasReadableSelection: hasReadableSelection
+		)
+		Thread.sleep(forTimeInterval: 0.3)
+		closeMenu(app, items: fresh, button: button)
+		result(req, error == .success, error == .success ? "pressed \(pressedLabel); selection: \(seen)" : "AXError \(error.rawValue); selection: \(seen)", extra: extra)
+		DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: poll)
+		return
 	}
 
 	guard let item else {
-		let offeredIds = fresh.compactMap { domID($0) }
-		let withoutIDCount = fresh.count - offeredIds.count
-		let offeredList = offeredIds.prefix(25).joined(separator: " | ")
-		let offered: String
-		if fresh.isEmpty {
-			offered = "nothing"
-		} else if offeredList.isEmpty {
-			offered = "\(withoutIDCount) control\(withoutIDCount == 1 ? "" : "s") without id"
-		} else if withoutIDCount == 0 {
-			offered = offeredList
-		} else {
-			offered = "\(offeredList) (+\(withoutIDCount) without id)"
-		}
 		closeMenu(app, items: fresh, button: button)
-		return result(req, false, "No \(itemIds.first ?? labels.first ?? "item") in \(id) menu; it offered: \(offered)")
+		return result(req, false, "No \(itemIds.first ?? labels.first ?? "item") in \(id) menu; it offered: \(offeredDescription(fresh))")
 	}
-	let error = AXUIElementPerformAction(item, kAXPressAction as CFString)
-	let pressedLabel = label(item) ?? domID(item) ?? "item"
+	let error = AXUIElementPerformAction(item.element, kAXPressAction as CFString)
+	let pressedLabel = label(item.element) ?? domID(item.element) ?? "item"
 	var extra: [String: Any] = [:]
-	if let selected = bool(item, "AXSelected") ?? bool(item, kAXValueAttribute) { extra["selected"] = selected }
+	if let selected = item.state { extra["selected"] = selected }
 	Thread.sleep(forTimeInterval: 0.3)
 	closeMenu(app, items: fresh, button: button)
 	result(req, error == .success, error == .success ? "pressed \(pressedLabel)" : "AXError \(error.rawValue)", extra: extra)
@@ -425,13 +648,20 @@ func menu(_ id: String, itemIds: [String], labels: [String], excludeLabels: [Str
 /// Closes a menu left open. On Teams 26267, pressing React again does NOT close its menu but
 /// Escape does, so Escape goes first; pressing the button again is the fallback.
 func closeMenu(_ app: AXUIElement, items: [AXUIElement], button: AXUIElement) {
+	func escape() {
+		for down in [true, false] { CGEvent(keyboardEventSource: nil, virtualKey: 0x35, keyDown: down)?.postToPid(appPID) }
+		Thread.sleep(forTimeInterval: 0.3)
+	}
 	func stillOpen() -> Bool {
 		let now = controls(in: app)
 		return items.contains { item in now.contains { CFEqual($0, item) } }
 	}
-	guard !items.isEmpty, stillOpen() else { return }
-	for down in [true, false] { CGEvent(keyboardEventSource: nil, virtualKey: 0x35, keyDown: down)?.postToPid(appPID) }
-	Thread.sleep(forTimeInterval: 0.3)
+	if items.isEmpty {
+		escape()
+		return
+	}
+	guard stillOpen() else { return }
+	escape()
 	if stillOpen() {
 		AXUIElementPerformAction(button, kAXPressAction as CFString)
 		Thread.sleep(forTimeInterval: 0.3)
@@ -458,6 +688,7 @@ func handle(_ line: String) {
 		meetingMarkerControlIDs = []
 		lastDiscovery = .distantPast
 		indicatorFastRediscoverySpent = false
+		fallbackBlurTurnedOnMenus.removeAll()
 		lastStatus = ""
 		poll()
 	case "press":
@@ -468,6 +699,7 @@ func handle(_ line: String) {
 			itemIds: message["itemIds"] as? [String] ?? [],
 			labels: message["labels"] as? [String] ?? [],
 			excludeLabels: message["excludeLabels"] as? [String] ?? [],
+			toggle: message["toggle"] as? [String: Any],
 			req: message["req"]
 		)
 	case "prompt":

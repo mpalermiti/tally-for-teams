@@ -36,6 +36,12 @@ export interface MenuTargetSelector {
 	excludeLabels: readonly string[];
 }
 
+export interface BridgeMenuTarget {
+	itemIds: string[];
+	labels: readonly string[];
+	excludeLabels?: readonly string[];
+}
+
 export interface SelectorConfig {
 	buttonIds: Record<ButtonKey, string>;
 	plainIds: readonly string[];
@@ -99,7 +105,7 @@ export const DEFAULT_SELECTORS = {
 	},
 	handItem: { id: "raisehands-button", labels: ["raise", "lower"] },
 	blur: {
-		on: { ids: [], labels: ["blur"], excludeLabels: ["no background effect", "none"] },
+		on: { ids: [], labels: ["standard blur", "blur"], excludeLabels: ["no background effect", "none"] },
 		off: { ids: [], labels: ["no background effect", "none"], excludeLabels: [] },
 	},
 	meetingMarkerIds: ["horizontalMiddleEnd", "horizontalEnd"],
@@ -153,7 +159,15 @@ export interface BridgeIndicator {
 
 export type BridgeCommand =
 	| { cmd: "press"; id: string }
-	| { cmd: "menu"; id: string; itemIds: string[]; labels: readonly string[]; excludeLabels?: readonly string[] };
+	| ({ cmd: "menu"; id: string } & (
+			| BridgeMenuTarget
+			| {
+					toggle: {
+						on: BridgeMenuTarget;
+						off: BridgeMenuTarget;
+					};
+			  }
+	  ));
 
 export function mergeSelectors(defaults: SelectorConfig, override?: unknown): MergeSelectorsResult {
 	const problems: string[] = [];
@@ -322,16 +336,15 @@ export function commandFor(
 			return { cmd: "press", id: selectors.buttonIds.mute };
 		case "toggle-video":
 			return { cmd: "press", id: selectors.buttonIds.camera };
-		case "set-background-blur": {
-			const target = type === "blur-off" ? selectors.blur.off : selectors.blur.on;
+		case "set-background-blur":
 			return {
 				cmd: "menu",
 				id: selectors.buttonIds.blur,
-				itemIds: [...target.ids],
-				labels: target.labels,
-				excludeLabels: target.excludeLabels,
+				toggle: {
+					on: menuTarget(selectors.blur.on),
+					off: menuTarget(selectors.blur.off),
+				},
 			};
-		}
 		case "leave-call":
 			return { cmd: "press", id: selectors.buttonIds.leave };
 		case "toggle-ui":
@@ -349,6 +362,10 @@ export function commandFor(
 		case "query-state":
 			return { unsupported: "Not needed: the bridge reports state continuously" };
 	}
+}
+
+function menuTarget(target: MenuTargetSelector): BridgeMenuTarget {
+	return { itemIds: [...target.ids], labels: target.labels, excludeLabels: target.excludeLabels };
 }
 
 export function parseMeetingDurationSeconds(label: string): number | undefined {

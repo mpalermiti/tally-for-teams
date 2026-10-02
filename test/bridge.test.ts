@@ -134,24 +134,25 @@ describe("TeamsBridge", () => {
 		await expect(pending).resolves.toEqual({ ok: false, message: "No surprised/wow in menu" });
 	});
 
-	it("sends Background blur requests through the video options menu", async () => {
+	it("sends Background blur as a bridge-side toggle through the video options menu", async () => {
 		start();
 		latest().status({ [BUTTON_IDS.mute]: "Mute mic", "video-button-configure": "Open video options" });
 		await until(() => bridge.snapshot.online);
 
-		const pending = bridge.request("set-background-blur", { type: "blur-on" });
+		const pending = bridge.request("set-background-blur");
 		await until(() => latest().written.some((m) => m.cmd === "menu"));
 		const sent = latest().written.find((m) => m.cmd === "menu");
 		expect(sent).toMatchObject({
 			cmd: "menu",
 			id: "video-button-configure",
-			itemIds: [],
-			labels: ["blur"],
-			excludeLabels: ["no background effect", "none"],
+			toggle: {
+				on: { itemIds: [], labels: ["standard blur", "blur"], excludeLabels: ["no background effect", "none"] },
+				off: { itemIds: [], labels: ["no background effect", "none"], excludeLabels: [] },
+			},
 			req: expect.any(Number),
 		});
-		latest().say({ type: "result", req: sent.req, ok: true, message: "pressed Standard blur" });
-		await expect(pending).resolves.toEqual({ ok: true, message: "pressed Standard blur" });
+		latest().say({ type: "result", req: sent.req, ok: true, message: "pressed Standard blur; selection: none selected", selected: false });
+		await expect(pending).resolves.toEqual({ ok: true, message: "pressed Standard blur; selection: none selected", selected: false });
 	});
 
 	it("answers unsupported actions without bothering the helper", async () => {

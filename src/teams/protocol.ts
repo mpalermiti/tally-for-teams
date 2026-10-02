@@ -22,9 +22,8 @@ export const REACTIONS: readonly Reaction[] = ["like", "love", "applause", "laug
 
 /** `toggle-ui` targets. */
 export type UiTarget = "chat" | "sharing-tray";
-export type BlurTarget = "blur-on" | "blur-off";
 
-export type ActionParameters = { type: Reaction | UiTarget | BlurTarget } | Record<string, never>;
+export type ActionParameters = { type: Reaction | UiTarget } | Record<string, never>;
 
 /** Why keys are dimmed while offline; shown in words on the Stream Deck+ dial. */
 export type OfflineReason = "no-permission" | "teams-not-running" | "starting" | "teams-changed";

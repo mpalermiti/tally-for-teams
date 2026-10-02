@@ -90,6 +90,7 @@ const status = (extra = {}) =>
 		}),
 	);
 const commands = (cmd) => toBridge.filter((m) => m.cmd === cmd);
+const menus = (id) => commands("menu").filter((c) => c.id === id);
 const reply = (command, ok = true, message = "pressed") => bridgeSocket.send(JSON.stringify({ type: "result", req: command.req, ok, message }));
 /** Answers the latest press like Teams would: flips the mic label. */
 const pressMic = (live) => {
@@ -147,24 +148,25 @@ try {
 	status({ indicators: [{ id: "call-duration-custom", role: "AXTimeGroup", label: "Elapsed time 01:05" }] });
 	await until(() => lastImage("TIMER1").includes(">1:05<"), "timer key shows a time from the duration indicator");
 
-	let blurMenus = commands("menu").filter((c) => c.id === "video-button-configure").length;
+	let blurMenus = menus("video-button-configure").length;
 	event("keyDown", "blur", "BLUR1", keyPayload());
-	await until(() => commands("menu").filter((c) => c.id === "video-button-configure").length === blurMenus + 1, "Background blur opens video options");
-	let blurMenu = commands("menu").filter((c) => c.id === "video-button-configure").at(-1);
+	await until(() => menus("video-button-configure").length === blurMenus + 1, "Background blur opens video options");
+	let blurMenu = menus("video-button-configure").at(-1);
 	check(
-		blurMenu.labels.includes("blur") && blurMenu.excludeLabels.includes("no background effect"),
-		"…looking for the blur item without matching no-effect",
+		blurMenu.toggle.on.labels.includes("standard blur") && blurMenu.toggle.on.excludeLabels.includes("no background effect"),
+		"…asking the bridge to toggle blur on from fresh Teams menu state",
 	);
-	reply(blurMenu, true, "pressed Standard blur");
+	check(blurMenu.toggle.off.labels.includes("no background effect"), "…including the no-background-effect off target");
+	reply(blurMenu, true, "pressed Standard blur; selection: no selected item seen");
 	await sleep(200);
 	check(alerts("BLUR1") === 0, "Background blur does not alert on success");
 
-	blurMenus = commands("menu").filter((c) => c.id === "video-button-configure").length;
+	blurMenus = menus("video-button-configure").length;
 	event("keyDown", "blur", "BLUR1", keyPayload());
-	await until(() => commands("menu").filter((c) => c.id === "video-button-configure").length === blurMenus + 1, "Background blur alternates to no effect after a confirmed on press");
-	blurMenu = commands("menu").filter((c) => c.id === "video-button-configure").at(-1);
-	check(blurMenu.labels.includes("no background effect"), "…looking for the no-background-effect item");
-	reply(blurMenu, true, "pressed No background effect");
+	await until(() => menus("video-button-configure").length === blurMenus + 1, "Background blur asks the bridge to decide again from fresh Teams state");
+	blurMenu = menus("video-button-configure").at(-1);
+	check(blurMenu.toggle.on.labels.includes("standard blur"), "…still sends a bridge-side toggle, not a remembered direction");
+	reply(blurMenu, true, "pressed No background effect; selection: blur selected");
 
 	event("keyDown", "mute", "MUTE1", keyPayload());
 	await until(() => commands("press").some((c) => c.id === "microphone-button"), "pressing mute presses microphone-button");
@@ -215,17 +217,19 @@ try {
 	check(commands("press").length === presses + 1, "mute key in a multi-action doesn't toggle back");
 
 	// Reactions go through the React menu.
+	const reactMenus = () => menus("reaction-menu-button");
+	const reactMenuStart = reactMenus().length;
 	event("keyDown", "react", "REACT1", keyPayload({ reaction: "love" }));
-	await until(() => commands("menu").length === 1, "react key opens the React menu");
-	const menu = commands("menu")[0];
+	await until(() => reactMenus().length === reactMenuStart + 1, "react key opens the React menu");
+	const menu = reactMenus().at(-1);
 	check(menu.id === "reaction-menu-button" && menu.itemIds.includes("heart-button"), "…looking for heart-button");
 	reply(menu, true, "pressed Love");
 	await sleep(200);
 	check(alerts("REACT1") === 0, "a sent reaction doesn't alert");
 
 	event("keyDown", "react", "REACT1", keyPayload({ reaction: "love" }));
-	await until(() => commands("menu").length === 2, "…second reaction");
-	reply(commands("menu")[1], false, "No heart-button in reaction-menu-button menu; it offered: nothing");
+	await until(() => reactMenus().length === reactMenuStart + 2, "…second reaction");
+	reply(reactMenus().at(-1), false, "No heart-button in reaction-menu-button menu; it offered: nothing");
 	await until(() => alerts("REACT1") === 1, "a missing menu item flashes an alert");
 
 	event("keyDown", "people", "PEOPLE1", keyPayload());
