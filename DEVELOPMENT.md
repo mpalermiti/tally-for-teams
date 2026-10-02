@@ -132,9 +132,10 @@ in that Teams window, capped for readability. It never logs labels or window tit
 files are Stream Deck profile format 3.0 ZIPs: each `.streamDeckProfile` contains one
 `<UUID>.sdProfile/manifest.json` plus page manifests under `Profiles/<PAGE-ID>/manifest.json`.
 The root manifest keeps the Stream Deck-exported shape (`Version`, `Device.Model`, `Device.UUID`,
-`Pages`), and each page has a `Keypad` controller; Stream Deck + pages also include an `Encoder`
-controller. `profiles/summary.json` is generated from the same source so tests can verify the layout
-without unpacking the ZIPs.
+`Pages`), with a separate empty default page and a current page that holds Tally actions. Each action
+entry includes the plugin UUID/name/version, and each page has a `Keypad` controller; Stream Deck +
+pages also include an `Encoder` controller. `profiles/summary.json` and the profile ZIP bytes are
+generated from the same source so tests can verify the layout without unpacking the committed ZIPs.
 
 The shipped profiles are:
 
@@ -148,9 +149,12 @@ the old layout. Do not bump names casually: Stream Deck cannot remove old bundle
 
 Auto-switch is opt-in through the global `autoSwitchProfile` setting in every action's property
 inspector. When enabled, the plugin switches connected DeviceType 0 and 7 devices to the matching
-bundled profile on a no-meeting → in-meeting transition. On meeting end it calls
-`switchToProfile(deviceId)` without a profile name for devices it moved, which asks Stream Deck to
-return to the previous profile. If the setting is off, Tally never sends `switchToProfile`.
+bundled profile immediately on a no-meeting → in-meeting transition. It switches back only after
+Stream Deck has reported a readable no-meeting state for about eight seconds; offline, helper restart,
+and "Teams changed" states are treated as unknown and never start that timer. On meeting end it calls
+`switchToProfile(deviceId)` without a profile name only for devices it moved that still have visible
+Tally actions, which avoids pulling the user away from a profile they selected manually. If the
+setting is off, Tally never sends `switchToProfile`.
 
 ### Releasing
 

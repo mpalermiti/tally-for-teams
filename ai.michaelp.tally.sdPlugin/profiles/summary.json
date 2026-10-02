@@ -1,10 +1,10 @@
 {
 	"version": 1,
-	"sourceHash": "ca5a038e587ae4a9d9627127fe1e2634f0751d1fcd23a0c534898df061e48bb5",
+	"sourceHash": "2dbece6f8efc937f5d3815ba1886ef9b7b30174c1b4a9f76826a6eec92491f07",
 	"profiles": {
 		"profiles/Tally (Stream Deck)": {
 			"deviceType": 0,
-			"model": "20GBA9901",
+			"model": "20GBD9901",
 			"keys": {
 				"0,0": {
 					"uuid": "ai.michaelp.tally.mute"

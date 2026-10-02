@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
-import { buildProfileSummary } from "../scripts/profiles";
+import { PROFILES, buildProfileArchiveEntries, buildProfileFiles, buildProfileSummary } from "../scripts/profiles";
 
 const pluginRoot = new URL("../ai.michaelp.tally.sdPlugin/", import.meta.url);
 const manifest = JSON.parse(readFileSync(new URL("../ai.michaelp.tally.sdPlugin/manifest.json", import.meta.url), "utf8"));
@@ -34,6 +34,48 @@ describe("bundled profiles", () => {
 
 	it("keeps the committed profile summary current with scripts/profiles.ts", () => {
 		expect(summary).toEqual(buildProfileSummary());
+	});
+
+	it("keeps committed profile archives byte-for-byte current with scripts/profiles.ts", () => {
+		for (const file of buildProfileFiles()) {
+			if (!file.path.endsWith(".streamDeckProfile")) continue;
+			const committed = readFileSync(new URL(`../ai.michaelp.tally.sdPlugin/${file.path}`, import.meta.url));
+			expect(Buffer.compare(committed, file.data), file.path).toBe(0);
+		}
+	});
+
+	it("generates v3 profiles with a separate empty default page and plugin versions", () => {
+		const pluginVersion = manifest.Version;
+
+		for (const profile of PROFILES) {
+			const root = `${profile.profileUuid}.sdProfile`;
+			const entries = new Map(
+				buildProfileArchiveEntries(profile).map((entry) => [
+					entry.path,
+					JSON.parse(entry.data.toString("utf8")) as {
+						Device?: { Model?: string };
+						Pages?: { Current: string; Default: string; Pages: string[] };
+						Controllers?: { Actions: Record<string, { Plugin: { Version?: string } }> | null }[];
+					},
+				]),
+			);
+			const rootManifest = entries.get(`${root}/manifest.json`);
+			expect(rootManifest?.Pages?.Default, profile.manifestName).not.toBe(rootManifest?.Pages?.Current);
+			expect(rootManifest?.Pages?.Pages, profile.manifestName).toEqual([rootManifest?.Pages?.Default, rootManifest?.Pages?.Current]);
+
+			const defaultPage = entries.get(`${root}/Profiles/${rootManifest?.Pages?.Default.toUpperCase()}/manifest.json`);
+			expect(defaultPage?.Controllers?.every((controller) => controller.Actions === null), profile.manifestName).toBe(true);
+
+			const keysPage = entries.get(`${root}/Profiles/${rootManifest?.Pages?.Current.toUpperCase()}/manifest.json`);
+			for (const controller of keysPage?.Controllers ?? []) {
+				for (const action of Object.values(controller.Actions ?? {})) {
+					expect(action.Plugin.Version, `${profile.manifestName} action plugin version`).toBe(pluginVersion);
+				}
+			}
+		}
+
+		const streamDeckProfile = PROFILES.find((profile) => profile.manifestName === "profiles/Tally (Stream Deck)");
+		expect(streamDeckProfile?.model).toBe("20GBD9901");
 	});
 
 	it("lays out the 15-key profile with every requested Tally action", () => {

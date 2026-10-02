@@ -4,7 +4,13 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { BlurKey, CameraKey, ChatKey, HandKey, LeaveKey, MuteKey, PeopleKey, ReactKey, ShareKey, TimerKey } from "./actions/keys";
-import { INITIAL_PROFILE_SWITCH_STATE, nextProfileSwitch, type ProfileSwitchState } from "./profiles";
+import {
+	INITIAL_PROFILE_SWITCH_STATE,
+	meetingStatusForProfileSwitch,
+	nextProfileSwitch,
+	type ProfileSwitchDevice,
+	type ProfileSwitchState,
+} from "./profiles";
 import { TeamsBridge } from "./teams/bridge";
 import type { Snapshot } from "./teams/protocol";
 import { loadSelectors } from "./teams/selectors-loader";
@@ -14,6 +20,7 @@ streamDeck.logger.setLevel("info");
 // The Swift helper is built next to this bundle (bin/teams-bridge). TEAMS_BRIDGE overrides it
 // for the end-to-end smoke test, which substitutes a scripted fake.
 const bridgePath = process.env.TEAMS_BRIDGE ?? join(dirname(fileURLToPath(import.meta.url)), "teams-bridge");
+const PLUGIN_UUID = "ai.michaelp.tally";
 
 // `streamdeck pack` drops the executable bit, so an installed plugin can't launch its helper
 // until it's restored. The plugin folder belongs to the user, so this is allowed.
@@ -46,7 +53,7 @@ const keys = [
 ];
 for (const key of keys) streamDeck.actions.registerAction(key);
 
-type GlobalSettings = { [key: string]: unknown; autoSwitchProfile?: boolean };
+type GlobalSettings = { autoSwitchProfile?: boolean };
 
 let autoSwitchProfile = false;
 let profileSwitchState: ProfileSwitchState = INITIAL_PROFILE_SWITCH_STATE;
@@ -57,18 +64,28 @@ function applyGlobalSettings(settings: GlobalSettings): void {
 
 streamDeck.settings.onDidReceiveGlobalSettings<GlobalSettings>((ev) => applyGlobalSettings(ev.settings));
 
-function connectedProfileDevices() {
-	const devices: { id: string; type: number }[] = [];
+function connectedProfileDevices(): ProfileSwitchDevice[] {
+	const devices: ProfileSwitchDevice[] = [];
 	streamDeck.devices.forEach((device) => {
-		if (device.isConnected !== false) devices.push({ id: device.id, type: device.type });
+		if (device.isConnected !== false) {
+			devices.push({ id: device.id, type: device.type, hasVisibleTallyActions: hasVisibleTallyActions(device) });
+		}
 	});
 	return devices;
+}
+
+function hasVisibleTallyActions(device: { actions: Iterable<{ manifestId: string }> }): boolean {
+	for (const action of device.actions) {
+		if (action.manifestId.startsWith(`${PLUGIN_UUID}.`)) return true;
+	}
+	return false;
 }
 
 async function syncMeetingProfile(snapshot: Snapshot): Promise<void> {
 	const result = nextProfileSwitch(profileSwitchState, {
 		autoSwitchProfile,
-		isInMeeting: snapshot.online && snapshot.state.isInMeeting,
+		meetingStatus: meetingStatusForProfileSwitch(snapshot),
+		nowMs: Date.now(),
 		devices: connectedProfileDevices(),
 	});
 	profileSwitchState = result.state;
@@ -96,9 +113,7 @@ teams.on("change", (snapshot) => {
 });
 
 await streamDeck.connect();
-try {
-	applyGlobalSettings(await streamDeck.settings.getGlobalSettings<GlobalSettings>());
-} catch (error) {
-	streamDeck.logger.warn(`profiles: couldn't read global settings; auto-switch stays off: ${(error as Error).message}`);
-}
 teams.start();
+void streamDeck.settings.getGlobalSettings<GlobalSettings>().then(applyGlobalSettings, (error: unknown) => {
+	streamDeck.logger.warn(`profiles: couldn't read global settings; auto-switch stays off: ${(error as Error).message}`);
+});

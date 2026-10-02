@@ -1,18 +1,28 @@
 import { describe, expect, it } from "vitest";
 
-import { INITIAL_PROFILE_SWITCH_STATE, nextProfileSwitch } from "../src/profiles";
+import {
+	INITIAL_PROFILE_SWITCH_STATE,
+	PROFILE_SWITCH_BACK_DELAY_MS,
+	meetingStatusForProfileSwitch,
+	nextProfileSwitch,
+	type ProfileSwitchState,
+} from "../src/profiles";
+import { EMPTY_STATE, NO_PERMISSIONS, type Snapshot } from "../src/teams/protocol";
 
 describe("profile auto-switch decisions", () => {
 	const devices = [
-		{ id: "SD15", type: 0 },
-		{ id: "PLUS", type: 7 },
-		{ id: "XL", type: 2 },
+		{ id: "SD15", type: 0, hasVisibleTallyActions: true },
+		{ id: "PLUS", type: 7, hasVisibleTallyActions: true },
+		{ id: "XL", type: 2, hasVisibleTallyActions: true },
 	];
+
+	const afterSwitch: ProfileSwitchState = { isInMeeting: true, switchedDeviceIds: ["SD15", "PLUS"] };
 
 	it("never switches while auto-switch is disabled", () => {
 		const result = nextProfileSwitch(INITIAL_PROFILE_SWITCH_STATE, {
 			autoSwitchProfile: false,
-			isInMeeting: true,
+			meetingStatus: "in-meeting",
+			nowMs: 0,
 			devices,
 		});
 
@@ -23,7 +33,8 @@ describe("profile auto-switch decisions", () => {
 	it("switches supported connected devices on a disabled-to-enabled meeting transition", () => {
 		const result = nextProfileSwitch(INITIAL_PROFILE_SWITCH_STATE, {
 			autoSwitchProfile: true,
-			isInMeeting: true,
+			meetingStatus: "in-meeting",
+			nowMs: 0,
 			devices,
 		});
 
@@ -35,16 +46,126 @@ describe("profile auto-switch decisions", () => {
 	});
 
 	it("does not switch repeatedly while the meeting remains active", () => {
-		const state = { isInMeeting: true, switchedDeviceIds: ["PLUS"] };
+		const state: ProfileSwitchState = { isInMeeting: true, switchedDeviceIds: ["PLUS"] };
 
-		expect(nextProfileSwitch(state, { autoSwitchProfile: true, isInMeeting: true, devices }).actions).toEqual([]);
+		expect(nextProfileSwitch(state, { autoSwitchProfile: true, meetingStatus: "in-meeting", nowMs: 1_000, devices }).actions).toEqual([]);
 	});
 
-	it("switches only devices it moved back to the previous profile on meeting end", () => {
-		const state = { isInMeeting: true, switchedDeviceIds: ["PLUS"] };
+	it("ignores a brief not-in-meeting toolbar rebuild blip before switching back", () => {
+		const blip = nextProfileSwitch(afterSwitch, {
+			autoSwitchProfile: true,
+			meetingStatus: "not-in-meeting",
+			nowMs: 1_000,
+			devices,
+		});
 
-		expect(nextProfileSwitch(state, { autoSwitchProfile: true, isInMeeting: false, devices }).actions).toEqual([
+		expect(blip.actions).toEqual([]);
+		expect(blip.state).toEqual({ ...afterSwitch, notInMeetingSinceMs: 1_000 });
+
+		const recovered = nextProfileSwitch(blip.state, {
+			autoSwitchProfile: true,
+			meetingStatus: "in-meeting",
+			nowMs: 4_000,
+			devices,
+		});
+
+		expect(recovered.actions).toEqual([]);
+		expect(recovered.state).toEqual(afterSwitch);
+	});
+
+	it("treats helper restarts as unknown and restarts the not-in-meeting clock", () => {
+		const unknown = nextProfileSwitch(afterSwitch, {
+			autoSwitchProfile: true,
+			meetingStatus: "unknown",
+			nowMs: 1_000,
+			devices,
+		});
+
+		expect(unknown.actions).toEqual([]);
+		expect(unknown.state).toEqual(afterSwitch);
+
+		const firstNoMeeting = nextProfileSwitch(unknown.state, {
+			autoSwitchProfile: true,
+			meetingStatus: "not-in-meeting",
+			nowMs: 3_000,
+			devices,
+		});
+		const almostElapsed = nextProfileSwitch(firstNoMeeting.state, {
+			autoSwitchProfile: true,
+			meetingStatus: "not-in-meeting",
+			nowMs: 3_000 + PROFILE_SWITCH_BACK_DELAY_MS - 1,
+			devices,
+		});
+
+		expect(firstNoMeeting.actions).toEqual([]);
+		expect(almostElapsed.actions).toEqual([]);
+		expect(almostElapsed.state).toEqual({ ...afterSwitch, notInMeetingSinceMs: 3_000 });
+	});
+
+	it("treats Teams-changed snapshots as unknown instead of switching back", () => {
+		const snapshot: Snapshot = {
+			online: true,
+			reason: "teams-changed",
+			state: EMPTY_STATE,
+			permissions: NO_PERMISSIONS,
+		};
+
+		expect(meetingStatusForProfileSwitch(snapshot)).toBe("unknown");
+		expect(
+			nextProfileSwitch(afterSwitch, {
+				autoSwitchProfile: true,
+				meetingStatus: meetingStatusForProfileSwitch(snapshot),
+				nowMs: 1_000 + PROFILE_SWITCH_BACK_DELAY_MS,
+				devices,
+			}).actions,
+		).toEqual([]);
+	});
+
+	it("switches only devices it moved back to the previous profile after a real meeting end persists", () => {
+		const ending = nextProfileSwitch(afterSwitch, {
+			autoSwitchProfile: true,
+			meetingStatus: "not-in-meeting",
+			nowMs: 1_000,
+			devices,
+		});
+		const elapsed = nextProfileSwitch(ending.state, {
+			autoSwitchProfile: true,
+			meetingStatus: "not-in-meeting",
+			nowMs: 1_000 + PROFILE_SWITCH_BACK_DELAY_MS,
+			devices,
+		});
+
+		expect(elapsed.actions).toEqual([{ deviceId: "SD15" }, { deviceId: "PLUS" }]);
+		expect(elapsed.state).toEqual({ isInMeeting: false, switchedDeviceIds: [] });
+	});
+
+	it("does not yank devices that no longer show Tally actions on meeting end", () => {
+		const devicesAfterUserSwitch = [
+			{ id: "SD15", type: 0, hasVisibleTallyActions: false },
+			{ id: "PLUS", type: 7, hasVisibleTallyActions: true },
+		];
+		const ending = nextProfileSwitch(afterSwitch, {
+			autoSwitchProfile: true,
+			meetingStatus: "not-in-meeting",
+			nowMs: 1_000,
+			devices: devicesAfterUserSwitch,
+		});
+
+		expect(
+			nextProfileSwitch(ending.state, {
+				autoSwitchProfile: true,
+				meetingStatus: "not-in-meeting",
+				nowMs: 1_000 + PROFILE_SWITCH_BACK_DELAY_MS,
+				devices: devicesAfterUserSwitch,
+			}).actions,
+		).toEqual([
 			{ deviceId: "PLUS" },
 		]);
+	});
+
+	it("maps offline snapshots to unknown", () => {
+		expect(meetingStatusForProfileSwitch({ online: false, reason: "teams-not-running", state: EMPTY_STATE, permissions: NO_PERMISSIONS })).toBe(
+			"unknown",
+		);
 	});
 });

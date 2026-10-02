@@ -59,8 +59,7 @@ const lastImage = (context) => {
 const feedback = (context) => fromPlugin.filter((m) => m.event === "setFeedback" && m.context === context).at(-1)?.payload;
 const alerts = (context) => fromPlugin.filter((m) => m.event === "showAlert" && m.context === context).length;
 const globalSettingsRequests = () => fromPlugin.filter((m) => m.event === "getGlobalSettings");
-const sendGlobalSettings = (settings, request = globalSettingsRequests().at(-1)) =>
-	toPlugin({ event: "didReceiveGlobalSettings", id: request?.id, payload: { settings } });
+const sendGlobalSettings = (settings) => toPlugin({ event: "didReceiveGlobalSettings", payload: { settings } });
 const profileSwitches = () => fromPlugin.filter((m) => m.event === "switchToProfile");
 
 // ── Fake Accessibility bridge ────────────────────────────────────
@@ -123,6 +122,7 @@ const plugin = spawn(
 
 try {
 	await until(() => fromPlugin.some((m) => m.event === "registerPlugin"), "plugin registers with Stream Deck");
+	toPlugin({ event: "deviceDidConnect", device: DEVICE, deviceInfo: info.devices[0] });
 	await until(() => globalSettingsRequests().length === 1, "plugin asks for global settings");
 	sendGlobalSettings({ autoSwitchProfile: false });
 	await until(() => commands("watch").length === 1, "plugin starts the bridge and asks it to watch the toolbar");

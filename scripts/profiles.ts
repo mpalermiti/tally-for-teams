@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 const ROOT = fileURLToPath(new URL("../", import.meta.url));
 const PLUGIN_DIR = join(ROOT, "ai.michaelp.tally.sdPlugin");
 const OUT_DIR = join(PLUGIN_DIR, "profiles");
+const MANIFEST_PATH = join(PLUGIN_DIR, "manifest.json");
 const PLUGIN_UUID = "ai.michaelp.tally";
 const PLUGIN_NAME = "Tally for Teams";
 
@@ -16,7 +17,7 @@ type ProfileAction = {
 	settings?: Record<string, string | boolean | number>;
 };
 type Layout = Record<string, ProfileAction>;
-type DeviceProfile = {
+export type DeviceProfile = {
 	manifestName: string;
 	displayName: string;
 	deviceType: number;
@@ -25,10 +26,13 @@ type DeviceProfile = {
 	rows: number;
 	encoders: number;
 	profileUuid: string;
+	defaultPageUuid: string;
 	pageUuid: string;
 	keys: Layout;
 	dials?: Layout;
 };
+
+export type BuiltProfileFile = { path: string; data: Buffer };
 
 const action = (kind: string, name: string, settings?: ProfileAction["settings"]): ProfileAction => ({
 	uuid: `${PLUGIN_UUID}.${kind}`,
@@ -41,11 +45,12 @@ export const PROFILES: readonly DeviceProfile[] = [
 		manifestName: "profiles/Tally (Stream Deck)",
 		displayName: "Tally (Stream Deck)",
 		deviceType: 0,
-		model: "20GBA9901",
+		model: "20GBD9901",
 		columns: 5,
 		rows: 3,
 		encoders: 0,
 		profileUuid: "F5E31DC0-4615-4EDC-A66E-C05F1C54F101",
+		defaultPageUuid: "96F1C6AE-93D8-4F85-B1E4-6FE9F86C4892",
 		pageUuid: "8D03D640-0B4F-4A5E-8C69-7C8D789B4011",
 		keys: {
 			"0,0": action("mute", "Mute"),
@@ -73,6 +78,7 @@ export const PROFILES: readonly DeviceProfile[] = [
 		rows: 2,
 		encoders: 4,
 		profileUuid: "6A3B3ED8-BE93-47C8-A82D-75AD9C7F02E1",
+		defaultPageUuid: "2212BB7A-BE19-4D92-A7BC-A1FB6F45009E",
 		pageUuid: "B016A418-0555-4B3E-B859-28A2B3861931",
 		keys: {
 			"0,0": action("mute", "Mute"),
@@ -125,24 +131,26 @@ function profileRootManifest(profile: DeviceProfile) {
 		Device: { Model: profile.model, UUID: "" },
 		InstalledByPluginUUID: PLUGIN_UUID,
 		Name: profile.displayName,
-		Pages: { Current: profile.pageUuid, Default: profile.pageUuid, Pages: [profile.pageUuid] },
+		Pages: { Current: profile.pageUuid, Default: profile.defaultPageUuid, Pages: [profile.defaultPageUuid, profile.pageUuid] },
 		PreconfiguredName: profile.manifestName,
 		Version: "3.0",
 	};
 }
 
-function pageManifest(profile: DeviceProfile) {
+function pageManifest(profile: DeviceProfile, { empty = false, pluginVersion = readPluginVersion() } = {}) {
 	return {
 		Controllers: [
-			{ Actions: placedActions(profile, "Keypad", profile.keys), Type: "Keypad" },
-			...(profile.encoders > 0 ? [{ Actions: placedActions(profile, "Encoder", profile.dials ?? {}), Type: "Encoder" }] : []),
+			{ Actions: placedActions(profile, "Keypad", empty ? {} : profile.keys, pluginVersion), Type: "Keypad" },
+			...(profile.encoders > 0
+				? [{ Actions: placedActions(profile, "Encoder", empty ? {} : (profile.dials ?? {}), pluginVersion), Type: "Encoder" }]
+				: []),
 		],
 		Icon: "",
 		Name: "",
 	};
 }
 
-function placedActions(profile: DeviceProfile, controller: Controller, layout: Layout): Record<string, object> | null {
+function placedActions(profile: DeviceProfile, controller: Controller, layout: Layout, pluginVersion: string): Record<string, object> | null {
 	const placed = Object.fromEntries(
 		Object.entries(layout)
 			.sort(([a], [b]) => a.localeCompare(b, "en"))
@@ -154,7 +162,7 @@ function placedActions(profile: DeviceProfile, controller: Controller, layout: L
 						ActionID: stableUuid(`${profile.manifestName}:${controller}:${position}:${profileAction.uuid}`),
 						LinkedTitle: true,
 						Name: profileAction.name,
-						Plugin: { Name: PLUGIN_NAME, UUID: PLUGIN_UUID },
+						Plugin: { Name: PLUGIN_NAME, UUID: PLUGIN_UUID, Version: pluginVersion },
 						Resources: null,
 						Settings: profileAction.settings ?? {},
 						State: 0,
@@ -192,20 +200,45 @@ function stableUuid(source: string): string {
 	return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
-function writeProfile(profile: DeviceProfile): void {
+function readPluginVersion(): string {
+	return JSON.parse(readFileSync(MANIFEST_PATH, "utf8")).Version;
+}
+
+export function buildProfileArchiveEntries(profile: DeviceProfile): ZipEntry[] {
 	const root = `${profile.profileUuid}.sdProfile`;
-	const entries = new Map<string, string>();
-	entries.set(`${root}/manifest.json`, JSON.stringify(profileRootManifest(profile)));
-	entries.set(`${root}/Profiles/${profile.pageUuid.toUpperCase()}/manifest.json`, JSON.stringify(pageManifest(profile)));
-	writeZip(
-		[...entries.entries()].map(([path, content]) => ({ path, data: Buffer.from(content, "utf8") })),
-		join(PLUGIN_DIR, `${profile.manifestName}.streamDeckProfile`),
-	);
+	const pluginVersion = readPluginVersion();
+	return [
+		{ path: `${root}/manifest.json`, data: Buffer.from(JSON.stringify(profileRootManifest(profile)), "utf8") },
+		{
+			path: `${root}/Profiles/${profile.defaultPageUuid.toUpperCase()}/manifest.json`,
+			data: Buffer.from(JSON.stringify(pageManifest(profile, { empty: true, pluginVersion })), "utf8"),
+		},
+		{
+			path: `${root}/Profiles/${profile.pageUuid.toUpperCase()}/manifest.json`,
+			data: Buffer.from(JSON.stringify(pageManifest(profile, { pluginVersion })), "utf8"),
+		},
+	];
+}
+
+function buildProfileArchive(profile: DeviceProfile): Buffer {
+	return zipBuffer(buildProfileArchiveEntries(profile));
+}
+
+export function buildProfileFiles(): BuiltProfileFile[] {
+	return [
+		...PROFILES.map((profile) => ({
+			path: `${profile.manifestName}.streamDeckProfile`,
+			data: buildProfileArchive(profile),
+		})),
+		{
+			path: "profiles/summary.json",
+			data: Buffer.from(JSON.stringify(buildProfileSummary(), null, "\t") + "\n", "utf8"),
+		},
+	];
 }
 
 function writeManifestProfiles(): void {
-	const manifestPath = join(PLUGIN_DIR, "manifest.json");
-	const raw = readFileSync(manifestPath, "utf8");
+	const raw = readFileSync(MANIFEST_PATH, "utf8");
 	const manifest = JSON.parse(raw);
 	manifest.Profiles = PROFILES.map((profile) => ({
 		Name: profile.manifestName,
@@ -213,21 +246,23 @@ function writeManifestProfiles(): void {
 		Readonly: false,
 		DontAutoSwitchWhenInstalled: true,
 	}));
-	writeFileSync(manifestPath, JSON.stringify(manifest, null, "\t") + "\n");
+	writeFileSync(MANIFEST_PATH, JSON.stringify(manifest, null, "\t") + "\n");
 }
 
 function writeProfiles(): void {
 	rmSync(OUT_DIR, { recursive: true, force: true });
 	mkdirSync(OUT_DIR, { recursive: true });
-	for (const profile of PROFILES) writeProfile(profile);
-	writeFileSync(join(OUT_DIR, "summary.json"), JSON.stringify(buildProfileSummary(), null, "\t") + "\n");
+	for (const file of buildProfileFiles()) {
+		const outPath = join(PLUGIN_DIR, file.path);
+		mkdirSync(dirname(outPath), { recursive: true });
+		writeFileSync(outPath, file.data);
+	}
 	writeManifestProfiles();
 }
 
 type ZipEntry = { path: string; data: Buffer };
 
-function writeZip(entries: ZipEntry[], outPath: string): void {
-	mkdirSync(dirname(outPath), { recursive: true });
+function zipBuffer(entries: ZipEntry[]): Buffer {
 	const parts: Buffer[] = [];
 	const central: Buffer[] = [];
 	let offset = 0;
@@ -281,7 +316,7 @@ function writeZip(entries: ZipEntry[], outPath: string): void {
 	eocd.writeUInt32LE(centralSize, 12);
 	eocd.writeUInt32LE(offset, 16);
 	eocd.writeUInt16LE(0, 20);
-	writeFileSync(outPath, Buffer.concat([...parts, ...central, eocd]));
+	return Buffer.concat([...parts, ...central, eocd]);
 }
 
 const CRC_TABLE = Array.from({ length: 256 }, (_, index) => {
