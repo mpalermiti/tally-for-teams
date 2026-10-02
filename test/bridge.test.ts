@@ -91,6 +91,7 @@ describe("TeamsBridge", () => {
 			cmd: "watch",
 			anchor: ANCHOR_ID,
 			bundleIds: ["com.microsoft.teams2"],
+			indicatorContainers: ["indicators"],
 			ids: expect.arrayContaining([
 				...Object.values(BUTTON_IDS),
 				"raisehands-button",

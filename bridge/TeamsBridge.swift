@@ -6,12 +6,12 @@
 // (src/teams/selectors.ts) owns that, so Teams UI changes are fixed in TypeScript.
 //
 // Protocol: one JSON object per line.
-//   stdin  {"cmd":"watch","ids":["microphone-button",…],"anchor":"microphone-button","markers":["hangup-button",…],"bundleIds":["com.microsoft.teams2"]}
+//   stdin  {"cmd":"watch","ids":["microphone-button",…],"anchor":"microphone-button","markers":["hangup-button",…],"indicatorContainers":["indicators"],"bundleIds":["com.microsoft.teams2"]}
 //          {"cmd":"press","req":1,"id":"microphone-button"}
 //          {"cmd":"menu","req":2,"id":"reaction-menu-button","itemIds":["like-button"],"labels":["like"]}
 //                                                                                 open a menu, press the new item (id first, then label)
 //          {"cmd":"prompt"}                                                       show macOS's Accessibility permission prompt
-//   stdout {"type":"status","trusted":true,"running":true,"markers":["hangup-button"],"markerControlIds":["hangup-button"],"buttons":{"microphone-button":{"label":"Mute mic","enabled":true,"style":"fui-Button …"}}}
+//   stdout {"type":"status","trusted":true,"running":true,"indicators":[{"id":"call-duration-custom","role":"AXTimeGroup","label":"Elapsed time 00:34"}],"markers":["hangup-button"],"markerControlIds":["hangup-button"],"buttons":{"microphone-button":{"label":"Mute mic","enabled":true,"style":"fui-Button …"}}}
 //          {"type":"result","req":1,"ok":true,"message":"pressed"}
 //          {"type":"log","message":"…"}
 //
@@ -64,6 +64,8 @@ let controlRoles: Set<String> = [
 	"AXButton", "AXCheckBox", "AXRadioButton", "AXMenuButton", "AXPopUpButton", "AXMenuItem", "AXToggle", "AXSwitch",
 ]
 let markerContainerRoles: Set<String> = ["AXToolbar", "AXGroup"]
+let indicatorRoles: Set<String> = ["AXButton", "AXGroup", "AXTimeGroup", "AXStaticText"]
+let textInputRoles: Set<String> = ["AXTextField", "AXTextArea", "AXSearchField", "AXComboBox"]
 
 func windows(of app: AXUIElement) -> [AXUIElement] {
 	(value(app, kAXWindowsAttribute) as? [AXUIElement]) ?? []
@@ -91,20 +93,32 @@ struct WindowScan {
 	let found: [String: AXUIElement]
 	let markers: [String]
 	let markerControlIDs: [String]
+	let indicatorContainers: [String: AXUIElement]
 }
 
-func scanWindow(_ root: AXUIElement, wanted: Set<String>, markers: [String], maxNodes: Int = 40_000) -> WindowScan {
+func scanWindow(
+	_ root: AXUIElement,
+	wanted: Set<String>,
+	markers: [String],
+	indicatorContainerIDs: [String],
+	maxNodes: Int = 40_000
+) -> WindowScan {
 	let markerSet = Set(markers)
+	let indicatorContainerSet = Set(indicatorContainerIDs)
 	var seenMarkers = Set<String>()
 	var found: [String: AXUIElement] = [:]
 	var markerControlIDs: [String] = []
 	var seenMarkerControlIDs = Set<String>()
+	var indicatorContainers: [String: AXUIElement] = [:]
 	var stack: [(element: AXUIElement, insideMarkerContainer: Bool)] = [(root, false)]
 	var visited = 0
 	while let current = stack.popLast(), visited < maxNodes {
 		visited += 1
 		let element = current.element
 		let role = string(element, kAXRoleAttribute)
+		if let id = domIdentifier(element), indicatorContainerSet.contains(id), indicatorContainers[id] == nil {
+			indicatorContainers[id] = element
+		}
 		var insideMarkerContainer = current.insideMarkerContainer
 		if let role, markerContainerRoles.contains(role), let id = domIdentifier(element), markerSet.contains(id) {
 			seenMarkers.insert(id)
@@ -117,7 +131,12 @@ func scanWindow(_ root: AXUIElement, wanted: Set<String>, markers: [String], max
 		}
 		stack.append(contentsOf: children(element).map { ($0, insideMarkerContainer) })
 	}
-	return WindowScan(found: found, markers: markers.filter { seenMarkers.contains($0) }, markerControlIDs: markerControlIDs)
+	return WindowScan(
+		found: found,
+		markers: markers.filter { seenMarkers.contains($0) },
+		markerControlIDs: markerControlIDs,
+		indicatorContainers: indicatorContainers
+	)
 }
 
 // MARK: - State
@@ -125,11 +144,13 @@ func scanWindow(_ root: AXUIElement, wanted: Set<String>, markers: [String], max
 var watchIDs: [String] = []
 var anchorID = "microphone-button"
 var markerIDs: [String] = []
+var indicatorContainerIDs: [String] = []
 var bundleIDs = ["com.microsoft.teams2"]
 
 var appPID: pid_t = 0
 var axApp: AXUIElement?
 var cache: [String: AXUIElement] = [:]
+var indicatorContainers: [String: AXUIElement] = [:]
 var meetingMarkers: [String] = []
 var meetingMarkerControlIDs: [String] = []
 var lastDiscovery = Date.distantPast
@@ -159,19 +180,22 @@ func discover(_ app: AXUIElement) {
 	var best: [String: AXUIElement] = [:]
 	var bestMarkers: [String] = []
 	var bestMarkerControlIDs: [String] = []
+	var bestIndicatorContainers: [String: AXUIElement] = [:]
 	var bestScore = -1
 	for window in windows(of: app) {
-		let scan = scanWindow(window, wanted: wanted, markers: markerIDs)
+		let scan = scanWindow(window, wanted: wanted, markers: markerIDs, indicatorContainerIDs: indicatorContainerIDs)
 		let hasAnchor = scan.found[anchorID] != nil
 		let score = scan.found.count + (hasAnchor ? 1000 : 0) + (!hasAnchor && !scan.markers.isEmpty ? 500 : 0)
 		if score > bestScore {
 			best = scan.found
 			bestMarkers = hasAnchor ? [] : scan.markers
 			bestMarkerControlIDs = hasAnchor || scan.markers.isEmpty ? [] : scan.markerControlIDs
+			bestIndicatorContainers = scan.indicatorContainers
 			bestScore = score
 		}
 	}
 	cache = best
+	indicatorContainers = bestIndicatorContainers
 	meetingMarkers = bestMarkers
 	meetingMarkerControlIDs = bestMarkerControlIDs
 }
@@ -188,10 +212,43 @@ func readButtons() -> [String: [String: Any]] {
 	return buttons
 }
 
+/// Indicator descendants from named containers in the chosen meeting window. Labels are read only here.
+func readIndicators(maxNodes: Int = 500, maxItems: Int = 20) -> [[String: Any]] {
+	var indicators: [[String: Any]] = []
+	var seen = Set<String>()
+	for containerID in indicatorContainerIDs {
+		guard let container = indicatorContainers[containerID] else { continue }
+		var stack = children(container)
+		var visited = 0
+		while let element = stack.popLast(), visited < maxNodes, indicators.count < maxItems {
+			visited += 1
+			let role = string(element, kAXRoleAttribute)
+			if let role, textInputRoles.contains(role) { continue }
+			if let role, indicatorRoles.contains(role) {
+				let id = domID(element)
+				let text = label(element)
+				if id != nil || text != nil {
+					let key = "\(id ?? "")|\(role)|\(text ?? "")"
+					if seen.insert(key).inserted {
+						var item: [String: Any] = ["role": role]
+						if let id { item["id"] = id }
+						if let text { item["label"] = text }
+						indicators.append(item)
+					}
+				}
+			}
+			stack.append(contentsOf: children(element))
+		}
+		if indicators.count >= maxItems { break }
+	}
+	return indicators
+}
+
 func poll() {
 	guard !watchIDs.isEmpty else { return }
 	let trusted = AXIsProcessTrusted()
 	var buttons: [String: [String: Any]] = [:]
+	var indicators: [[String: Any]] = []
 	var markers: [String] = []
 	var markerControlIds: [String] = []
 	var running = false
@@ -205,6 +262,7 @@ func poll() {
 			enableTree(element)
 			axApp = element
 			cache = [:]
+			indicatorContainers = [:]
 			meetingMarkers = []
 			meetingMarkerControlIDs = []
 			lastDiscovery = .distantPast
@@ -220,6 +278,7 @@ func poll() {
 				discover(app)
 				buttons = readButtons()
 			}
+			indicators = readIndicators()
 			if buttons[anchorID] == nil {
 				markers = meetingMarkers
 				markerControlIds = markers.isEmpty ? [] : meetingMarkerControlIDs
@@ -229,11 +288,20 @@ func poll() {
 		appPID = 0
 		axApp = nil
 		cache = [:]
+		indicatorContainers = [:]
 		meetingMarkers = []
 		meetingMarkerControlIDs = []
 	}
 
-	let status: [String: Any] = ["type": "status", "trusted": trusted, "running": running, "buttons": buttons, "markers": markers, "markerControlIds": markerControlIds]
+	let status: [String: Any] = [
+		"type": "status",
+		"trusted": trusted,
+		"running": running,
+		"buttons": buttons,
+		"indicators": indicators,
+		"markers": markers,
+		"markerControlIds": markerControlIds,
+	]
 	if let data = try? JSONSerialization.data(withJSONObject: status, options: [.sortedKeys]),
 		let line = String(data: data, encoding: .utf8), line != lastStatus
 	{
@@ -344,8 +412,10 @@ func handle(_ line: String) {
 		watchIDs = message["ids"] as? [String] ?? []
 		anchorID = message["anchor"] as? String ?? anchorID
 		markerIDs = message["markers"] as? [String] ?? []
+		indicatorContainerIDs = message["indicatorContainers"] as? [String] ?? []
 		bundleIDs = message["bundleIds"] as? [String] ?? bundleIDs
 		cache = [:]
+		indicatorContainers = [:]
 		meetingMarkers = []
 		meetingMarkerControlIDs = []
 		lastDiscovery = .distantPast

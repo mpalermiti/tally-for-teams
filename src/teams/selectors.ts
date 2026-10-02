@@ -36,6 +36,7 @@ export interface SelectorConfig {
 	reactionItems: Record<Reaction, MenuItemSelector>;
 	handItem: MenuItemSelector;
 	meetingMarkerIds: readonly string[];
+	indicatorContainerIds: readonly string[];
 	labelPatterns: {
 		mute: { muted: string; live: string };
 		camera: { on: string; off: string };
@@ -78,6 +79,7 @@ export const DEFAULT_SELECTORS = {
 	},
 	handItem: { id: "raisehands-button", labels: ["raise", "lower"] },
 	meetingMarkerIds: ["horizontalMiddleEnd", "horizontalEnd"],
+	indicatorContainerIds: ["indicators"],
 	labelPatterns: {
 		mute: { muted: "^unmute", live: "^mute" },
 		camera: { on: "\\boff\\b", off: "\\bon\\b" },
@@ -106,10 +108,18 @@ export interface BridgeStatus {
 	trusted: boolean;
 	running: boolean;
 	buttons: Record<string, BridgeButton>;
+	/** Descendant elements found inside meeting indicator containers. */
+	indicators?: BridgeIndicator[];
 	/** Web ids of meeting UI markers the bridge saw in the selected Teams window. */
 	markers?: string[];
 	/** Control ids found inside meeting marker containers, for Teams-changed bug reports. */
 	markerControlIds?: string[];
+}
+
+export interface BridgeIndicator {
+	id?: string;
+	role: string;
+	label?: string;
 }
 
 export type BridgeCommand =
@@ -134,6 +144,11 @@ export function watchIds(selectors: Selectors = DEFAULT_ACTIVE_SELECTORS): strin
 /** Every web id whose presence means Teams still has meeting UI even if the mic anchor moved. */
 export function meetingMarkerIds(selectors: Selectors = DEFAULT_ACTIVE_SELECTORS): string[] {
 	return unique([selectors.buttonIds.leave, ...selectors.meetingMarkerIds]);
+}
+
+/** Container web ids whose descendants expose meeting indicators such as recording and elapsed time. */
+export function indicatorContainerIds(selectors: Selectors = DEFAULT_ACTIVE_SELECTORS): string[] {
+	return unique(selectors.indicatorContainerIds);
 }
 
 /** Turns the bridge's raw button labels into the meeting model keys render from. */
@@ -310,6 +325,7 @@ function compileSelectors(config: SelectorConfig, defaults: SelectorConfig, prob
 		reactionItems: config.reactionItems,
 		handItem: config.handItem,
 		meetingMarkerIds: config.meetingMarkerIds,
+		indicatorContainerIds: config.indicatorContainerIds,
 		labelPatterns: {
 			mute: {
 				muted: compilePattern(config.labelPatterns.mute.muted, defaults.labelPatterns.mute.muted, "labelPatterns.mute.muted", problems),

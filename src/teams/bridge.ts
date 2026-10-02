@@ -16,6 +16,7 @@ import {
 	TEAMS_BUNDLE_IDS,
 	anchorId,
 	commandFor,
+	indicatorContainerIds,
 	meetingMarkerIds,
 	TeamsChangedDebouncer,
 	watchIds,
@@ -149,6 +150,7 @@ export class TeamsBridge extends EventEmitter<{ change: [Snapshot] }> {
 			ids: watchIds(this.#selectors),
 			anchor: anchorId(this.#selectors),
 			markers: meetingMarkerIds(this.#selectors),
+			indicatorContainers: indicatorContainerIds(this.#selectors),
 			bundleIds: TEAMS_BUNDLE_IDS,
 		});
 	}

@@ -35,6 +35,10 @@ describe("snapshotFrom", () => {
 		expect(DEFAULT_SELECTORS.meetingMarkerIds).toEqual(["horizontalMiddleEnd", "horizontalEnd"]);
 	});
 
+	it("watches the meeting indicators container by default", () => {
+		expect(DEFAULT_SELECTORS.indicatorContainerIds).toEqual(["indicators"]);
+	});
+
 	it("reads mute and camera state from the button labels", () => {
 		const muted = snapshotFrom(status(toolbar));
 		expect(muted.online).toBe(true);
