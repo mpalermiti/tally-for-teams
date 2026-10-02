@@ -372,6 +372,68 @@ describe("HoldToggle", () => {
 	it("keeps the cough button live after a quick second hold with delayed Teams reports", async () => {
 		await expectQuickSecondHoldRestores(false);
 	});
+
+	it("doesn't let a duplicate release reopen the queue before a queued tap settles", async () => {
+		const c = clock();
+		const hold = new HoldToggle(400, c.now);
+		let muted = true;
+
+		await hold.down(() => muted, () => Promise.resolve(OK));
+		c.advance(900);
+
+		const firstToggleBack = deferred<RequestResult>();
+		const firstRelease = hold.up({
+			...releaseDefaults(),
+			currentMuted: () => false,
+			toggleBack: () =>
+				firstToggleBack.promise.then((result) => {
+					muted = true;
+					return result;
+				}),
+		});
+
+		c.advance(10);
+		const queuedTap = hold.down(
+			() => muted,
+			() => Promise.resolve(OK),
+		);
+		c.advance(10);
+		const tapApplied = deferred<boolean>();
+		const queuedTapRelease = hold.up({
+			...releaseDefaults(),
+			currentMuted: () => muted,
+			waitForChange: () =>
+				tapApplied.promise.then((flipped) => {
+					if (flipped) muted = false;
+					return flipped;
+				}),
+		});
+
+		c.advance(50);
+		const duplicateDisappearRelease = hold.up(releaseDefaults());
+
+		firstToggleBack.resolve(OK);
+		await expect(duplicateDisappearRelease).resolves.toMatchObject({ toggledBack: false });
+
+		let coughReads = 0;
+		const coughHold = hold.down(
+			() => {
+				coughReads++;
+				return muted;
+			},
+			() => Promise.resolve(OK),
+		);
+		await Promise.resolve();
+		expect(coughReads).toBe(0);
+
+		tapApplied.resolve(true);
+		await expect(firstRelease).resolves.toMatchObject({ toggledBack: true, result: OK });
+		await expect(queuedTap).resolves.toBe(OK);
+		await expect(queuedTapRelease).resolves.toMatchObject({ toggledBack: false });
+		await expect(coughHold).resolves.toBe(OK);
+		expect(coughReads).toBe(1);
+		expect(muted).toBe(false);
+	});
 });
 
 describe("RotateToggle", () => {

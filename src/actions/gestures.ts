@@ -162,10 +162,7 @@ export class HoldToggle {
 			}
 			return { toggledBack: true, result };
 		})();
-		const queued = release.then(
-			() => undefined,
-			() => undefined,
-		);
+		const queued = Promise.all([this.#release, release.catch(() => {})]).then(() => undefined);
 		this.#release = queued;
 		this.#releasePending = true;
 		void queued.finally(() => {
