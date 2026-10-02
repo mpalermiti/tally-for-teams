@@ -9,7 +9,7 @@
  * live + hold = cough button. The first toggle happens on press so a tap feels instant.
  */
 export class HoldToggle {
-	#down: { at: number; muted: boolean } | undefined;
+	#down: { at: number; muted: boolean | undefined } | undefined;
 
 	constructor(
 		private readonly thresholdMs = 400,
@@ -17,18 +17,18 @@ export class HoldToggle {
 	) {}
 
 	/** Always toggles; remembers the state it started from. */
-	down(muted: boolean): true {
+	down(muted: boolean | undefined): true {
 		this.#down = { at: this.now(), muted };
 		return true;
 	}
 
 	/** Toggles back only after a hold, and only if the first toggle actually landed. */
-	up(muted: boolean): boolean {
+	up(muted: boolean | undefined): boolean {
 		const down = this.#down;
 		this.#down = undefined;
 		if (!down) return false;
 		const held = this.now() - down.at >= this.thresholdMs;
-		return held && muted !== down.muted;
+		return held && down.muted !== undefined && muted !== undefined && muted !== down.muted;
 	}
 }
 
@@ -45,8 +45,9 @@ export class RotateToggle {
 		private readonly now: () => number = () => performance.now(),
 	) {}
 
-	shouldToggle(ticks: number, muted: boolean): boolean {
+	shouldToggle(ticks: number, muted: boolean | undefined): boolean {
 		if (this.now() < this.#cooldownUntil) return false;
+		if (muted === undefined) return false;
 		const wantsMuted = ticks < 0;
 		if (ticks === 0 || wantsMuted === muted) return false;
 		this.#cooldownUntil = this.now() + this.cooldownMs;

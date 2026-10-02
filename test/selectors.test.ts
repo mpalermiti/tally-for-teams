@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
 	BUTTON_IDS,
 	DEFAULT_SELECTORS,
+	TeamsChangedDebouncer,
 	commandFor,
 	mergeSelectors,
 	snapshotFrom,
@@ -104,6 +105,60 @@ describe("snapshotFrom", () => {
 	it("goes offline with a reason when Teams can't be read", () => {
 		expect(snapshotFrom(status({}, { trusted: false }))).toMatchObject({ online: false, reason: "no-permission" });
 		expect(snapshotFrom(status({}, { running: false }))).toMatchObject({ online: false, reason: "teams-not-running" });
+	});
+});
+
+describe("TeamsChangedDebouncer", () => {
+	function clock(start = 1_000) {
+		let t = start;
+		return { now: () => t, advance: (ms: number) => (t += ms) };
+	}
+
+	it("keeps the last stable meeting snapshot during a transient markers-without-mic window", () => {
+		const c = clock();
+		const debounce = new TeamsChangedDebouncer(c.now);
+		const live = debounce.next(status({ ...toolbar, "microphone-button": "Mute mic" }));
+		expect(live.state).toMatchObject({ isInMeeting: true, isMuted: false });
+
+		c.advance(500);
+		const transient = debounce.next(status({ "hangup-button": "Leave" }, { markers: ["hangup-button", "horizontalEnd"] }));
+		expect(transient.reason).toBeUndefined();
+		expect(transient.state).toMatchObject({ isInMeeting: true, isMuted: false });
+	});
+
+	it("reports teams-changed only after markers without the mic persist for at least 3 seconds", () => {
+		const c = clock();
+		const debounce = new TeamsChangedDebouncer(c.now);
+		debounce.next(status({ ...toolbar, "microphone-button": "Mute mic" }));
+
+		c.advance(500);
+		debounce.next(status({ "hangup-button": "Leave" }, { markers: ["hangup-button", "horizontalEnd"] }));
+		c.advance(2_999);
+		expect(debounce.next(status({ "hangup-button": "Leave" }, { markers: ["hangup-button", "horizontalEnd"] })).reason).toBeUndefined();
+		c.advance(1);
+		expect(debounce.next(status({ "hangup-button": "Leave" }, { markers: ["hangup-button", "horizontalEnd"] })).reason).toBe("teams-changed");
+	});
+
+	it("cancels the pending teams-changed state when the mic anchor comes back", () => {
+		const c = clock();
+		const debounce = new TeamsChangedDebouncer(c.now);
+		debounce.next(status({ ...toolbar, "microphone-button": "Mute mic" }));
+		c.advance(500);
+		debounce.next(status({ "hangup-button": "Leave" }, { markers: ["hangup-button", "horizontalEnd"] }));
+		c.advance(2_000);
+		expect(debounce.next(status({ ...toolbar, "microphone-button": "Mute mic" })).state.isInMeeting).toBe(true);
+		c.advance(500);
+		expect(debounce.next(status({ "hangup-button": "Leave" }, { markers: ["hangup-button", "horizontalEnd"] })).reason).toBeUndefined();
+	});
+
+	it("forgets the last stable meeting snapshot after reset", () => {
+		const c = clock();
+		const debounce = new TeamsChangedDebouncer(c.now);
+		debounce.next(status({ ...toolbar, "microphone-button": "Mute mic" }));
+		debounce.reset();
+		const transient = debounce.next(status({ "hangup-button": "Leave" }, { markers: ["hangup-button", "horizontalEnd"] }));
+		expect(transient.reason).toBeUndefined();
+		expect(transient.state.isInMeeting).toBe(false);
 	});
 });
 

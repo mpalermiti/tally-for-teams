@@ -43,6 +43,14 @@ describe("HoldToggle", () => {
 		expect(hold.up(true)).toBe(false); // still muted: toggling would unmute by surprise
 	});
 
+	it("treats an unknown mute state as a single toggle with no release toggle-back", () => {
+		const c = clock();
+		const hold = new HoldToggle(400, c.now);
+		expect(hold.down(undefined)).toBe(true);
+		c.advance(900);
+		expect(hold.up(false)).toBe(false);
+	});
+
 	it("ignores a release with no matching press", () => {
 		expect(new HoldToggle().up(true)).toBe(false);
 	});
@@ -69,6 +77,12 @@ describe("RotateToggle", () => {
 		const rotate = new RotateToggle();
 		expect(rotate.shouldToggle(2, false)).toBe(false); // already live
 		expect(rotate.shouldToggle(-2, true)).toBe(false); // already muted
+	});
+
+	it("does nothing when the mute state is unknown", () => {
+		const rotate = new RotateToggle();
+		expect(rotate.shouldToggle(2, undefined)).toBe(false);
+		expect(rotate.shouldToggle(-2, undefined)).toBe(false);
 	});
 
 	it("ignores the burst of ticks from one turn while Teams catches up", () => {

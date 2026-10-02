@@ -51,8 +51,9 @@ export class MuteKey extends TeamsKey {
 		return this.perform(ev.action, this.press());
 	}
 
-	get #muted(): boolean {
-		return this.teams.snapshot.state.isMuted;
+	get #muted(): boolean | undefined {
+		const { state } = this.teams.snapshot;
+		return state.isMuteKnown ? state.isMuted : undefined;
 	}
 }
 

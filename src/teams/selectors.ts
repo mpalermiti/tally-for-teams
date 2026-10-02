@@ -77,7 +77,7 @@ export const DEFAULT_SELECTORS = {
 		wow: { id: "surprised-button", labels: ["surprised", "wow"] },
 	},
 	handItem: { id: "raisehands-button", labels: ["raise", "lower"] },
-	meetingMarkerIds: ["horizontalMiddleEnd", "horizontalEnd"],
+	meetingMarkerIds: ["horizontalMiddleEnd", "horizontalEnd", "indicators"],
 	labelPatterns: {
 		mute: { muted: "^unmute", live: "^mute" },
 		camera: { on: "\\boff\\b", off: "\\bon\\b" },
@@ -108,6 +108,8 @@ export interface BridgeStatus {
 	buttons: Record<string, BridgeButton>;
 	/** Web ids of meeting UI markers the bridge saw in the selected Teams window. */
 	markers?: string[];
+	/** Control ids found inside meeting marker containers, for Teams-changed bug reports. */
+	markerControlIds?: string[];
 }
 
 export type BridgeCommand =
@@ -181,6 +183,52 @@ export function snapshotFrom(status: BridgeStatus, selectors: Selectors = DEFAUL
 			canStopSharing: usable(selectors.buttonIds.share) && sharing === true,
 		},
 	};
+}
+
+const TEAMS_CHANGED_DEBOUNCE_MS = 3_000;
+
+/**
+ * Teams can briefly rebuild the meeting toolbar without the mic anchor while sharing starts,
+ * compact view swaps in, or a call ends. Keep the last stable snapshot during that grace window
+ * and only surface "Teams changed" if the marker-without-mic condition persists.
+ */
+export class TeamsChangedDebouncer {
+	#pendingSince: number | undefined;
+	#pendingSignature = "";
+	#lastStable: Snapshot | undefined;
+
+	constructor(
+		private readonly now: () => number = () => performance.now(),
+		private readonly debounceMs = TEAMS_CHANGED_DEBOUNCE_MS,
+	) {}
+
+	reset(): void {
+		this.#pendingSince = undefined;
+		this.#pendingSignature = "";
+		this.#lastStable = undefined;
+	}
+
+	next(status: BridgeStatus, selectors: Selectors = DEFAULT_ACTIVE_SELECTORS): Snapshot {
+		const snapshot = snapshotFrom(status, selectors);
+		if (snapshot.reason !== "teams-changed") {
+			this.#pendingSince = undefined;
+			this.#pendingSignature = "";
+			this.#lastStable = snapshot;
+			return snapshot;
+		}
+
+		const signature = teamsChangedSignature(status);
+		if (this.#pendingSince === undefined || signature !== this.#pendingSignature) {
+			this.#pendingSince = this.now();
+			this.#pendingSignature = signature;
+		}
+		if (this.now() - this.#pendingSince >= this.debounceMs) return snapshot;
+		return this.#lastStable ?? { online: true, state: EMPTY_STATE, permissions: NO_PERMISSIONS };
+	}
+}
+
+function teamsChangedSignature(status: BridgeStatus): string {
+	return [...(status.markers ?? [])].sort().join("|");
 }
 
 /**

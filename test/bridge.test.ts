@@ -49,6 +49,11 @@ async function until(predicate: () => boolean, timeoutMs = 2000): Promise<void> 
 	}
 }
 
+function clock(start = 1_000) {
+	let t = start;
+	return { now: () => t, advance: (ms: number) => (t += ms) };
+}
+
 describe("TeamsBridge", () => {
 	let helpers: FakeHelper[];
 	let bridge: TeamsBridge;
@@ -171,6 +176,34 @@ describe("TeamsBridge", () => {
 		latest().say({ type: "log", message: "menu offered: Like | Heart" });
 		await until(() => logs.length > 0);
 		expect(logs).toContain("menu offered: Like | Heart");
+	});
+
+	it("logs a teams-changed id dump only after debounce, once per marker/id set", async () => {
+		const c = clock();
+		const logs: string[] = [];
+		start({ now: c.now, log: (m) => logs.push(m) });
+		latest().status({ [BUTTON_IDS.mute]: "Mute mic" });
+		await until(() => bridge.snapshot.online);
+
+		const changed = {
+			markers: ["hangup-button", "horizontalEnd"],
+			markerControlIds: ["hangup-button", "share-button"],
+		};
+		c.advance(500);
+		latest().status({ "hangup-button": "Leave" }, changed);
+		await new Promise((r) => setTimeout(r, 20));
+		expect(logs.filter((m) => m.includes("teams-changed markers"))).toEqual([]);
+
+		c.advance(3_000);
+		latest().status({ "hangup-button": "Leave" }, changed);
+		await until(() => logs.some((m) => m.includes("teams-changed markers")));
+		expect(logs.filter((m) => m.includes("teams-changed markers"))).toEqual([
+			"teams-changed markers: hangup-button | horizontalEnd; control ids: hangup-button | share-button",
+		]);
+
+		latest().status({ "hangup-button": "Leave" }, changed);
+		await new Promise((r) => setTimeout(r, 20));
+		expect(logs.filter((m) => m.includes("teams-changed markers"))).toHaveLength(1);
 	});
 
 	it("stops the helper and doesn't restart it", async () => {

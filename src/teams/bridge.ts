@@ -17,7 +17,7 @@ import {
 	anchorId,
 	commandFor,
 	meetingMarkerIds,
-	snapshotFrom,
+	TeamsChangedDebouncer,
 	watchIds,
 	type BridgeStatus,
 	type Selectors,
@@ -40,6 +40,7 @@ export interface TeamsBridgeOptions {
 	requestTimeoutMs?: number;
 	log?: (message: string) => void;
 	selectors?: Selectors;
+	now?: () => number;
 }
 
 interface Pending {
@@ -57,8 +58,9 @@ const PERMISSION_HINT = "Allow Stream Deck in System Settings → Privacy & Secu
  * retired local API: a live `snapshot`, a `change` event, and `request()`.
  */
 export class TeamsBridge extends EventEmitter<{ change: [Snapshot] }> {
-	#options: Required<Omit<TeamsBridgeOptions, "log" | "selectors">> & Pick<TeamsBridgeOptions, "log">;
+	#options: Required<Omit<TeamsBridgeOptions, "log" | "selectors" | "now">> & Pick<TeamsBridgeOptions, "log">;
 	#selectors: Selectors;
+	#teamsChanged: TeamsChangedDebouncer;
 	#process: BridgeProcess | undefined;
 	#snapshot: Snapshot = STARTING;
 	#running = false;
@@ -66,11 +68,13 @@ export class TeamsBridge extends EventEmitter<{ change: [Snapshot] }> {
 	#restartTimer: NodeJS.Timeout | undefined;
 	#nextRequestId = 1;
 	#pending = new Map<number, Pending>();
+	#lastTeamsChangedLogSignature = "";
 
 	constructor(options: TeamsBridgeOptions) {
 		super();
-		const { selectors = DEFAULT_ACTIVE_SELECTORS, ...rest } = options;
+		const { selectors = DEFAULT_ACTIVE_SELECTORS, now = () => performance.now(), ...rest } = options;
 		this.#selectors = selectors;
+		this.#teamsChanged = new TeamsChangedDebouncer(now);
 		this.#options = {
 			spawn: (command) => spawnProcess(command, [], { stdio: ["pipe", "pipe", "inherit"] }) as BridgeProcess,
 			backoffMs: [1_000, 2_000, 5_000, 10_000],
@@ -147,7 +151,7 @@ export class TeamsBridge extends EventEmitter<{ change: [Snapshot] }> {
 	}
 
 	#handle(line: string): void {
-		let message: { type?: string; req?: number; ok?: boolean; message?: string };
+		let message: { type?: string; req?: number; ok?: boolean; message?: string } & Partial<BridgeStatus>;
 		try {
 			message = JSON.parse(line);
 		} catch {
@@ -155,7 +159,10 @@ export class TeamsBridge extends EventEmitter<{ change: [Snapshot] }> {
 		}
 		if (message.type === "status") {
 			this.#attempt = 0;
-			this.#publish(snapshotFrom(message as BridgeStatus, this.#selectors));
+			const status = message as BridgeStatus;
+			const snapshot = this.#teamsChanged.next(status, this.#selectors);
+			this.#maybeLogTeamsChanged(status, snapshot);
+			this.#publish(snapshot);
 		} else if (message.type === "result" && typeof message.req === "number") {
 			const pending = this.#pending.get(message.req);
 			if (!pending) return;
@@ -165,6 +172,20 @@ export class TeamsBridge extends EventEmitter<{ change: [Snapshot] }> {
 		} else if (message.type === "log" && message.message) {
 			this.#options.log?.(message.message);
 		}
+	}
+
+	#maybeLogTeamsChanged(status: BridgeStatus, snapshot: Snapshot): void {
+		if (snapshot.reason !== "teams-changed") return;
+		const markers = status.markers ?? [];
+		const allIds = status.markerControlIds ?? [];
+		const ids = allIds.slice(0, 60);
+		const signature = `${markers.join("|")}::${ids.join("|")}::${allIds.length}`;
+		if (signature === this.#lastTeamsChangedLogSignature) return;
+		this.#lastTeamsChangedLogSignature = signature;
+		const more = allIds.length > ids.length ? ` (+${allIds.length - ids.length} more)` : "";
+		this.#options.log?.(
+			`teams-changed markers: ${markers.join(" | ")}; control ids: ${ids.length ? ids.join(" | ") : "none"}${more}`,
+		);
 	}
 
 	#write(message: object): void {
@@ -186,6 +207,7 @@ export class TeamsBridge extends EventEmitter<{ change: [Snapshot] }> {
 			resolve({ ok: false, message: "Lost contact with Teams" });
 		}
 		this.#pending.clear();
+		this.#teamsChanged.reset();
 		if (this.#snapshot !== STARTING) this.#publish(STARTING);
 	}
 

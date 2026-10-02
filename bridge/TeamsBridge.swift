@@ -11,7 +11,7 @@
 //          {"cmd":"menu","req":2,"id":"reaction-menu-button","itemIds":["like-button"],"labels":["like"]}
 //                                                                                 open a menu, press the new item (id first, then label)
 //          {"cmd":"prompt"}                                                       show macOS's Accessibility permission prompt
-//   stdout {"type":"status","trusted":true,"running":true,"markers":["hangup-button"],"buttons":{"microphone-button":{"label":"Mute mic","enabled":true,"style":"fui-Button …"}}}
+//   stdout {"type":"status","trusted":true,"running":true,"markers":["hangup-button"],"markerControlIds":["hangup-button"],"buttons":{"microphone-button":{"label":"Mute mic","enabled":true,"style":"fui-Button …"}}}
 //          {"type":"result","req":1,"ok":true,"message":"pressed"}
 //          {"type":"log","message":"…"}
 //
@@ -48,8 +48,11 @@ func children(_ element: AXUIElement) -> [AXUIElement] {
 func label(_ element: AXUIElement) -> String? {
 	string(element, kAXTitleAttribute) ?? string(element, kAXDescriptionAttribute)
 }
+func domIdentifier(_ element: AXUIElement) -> String? {
+	string(element, "AXDOMIdentifier")
+}
 func domID(_ element: AXUIElement) -> String? {
-	string(element, "AXDOMIdentifier") ?? string(element, kAXIdentifierAttribute)
+	domIdentifier(element) ?? string(element, kAXIdentifierAttribute)
 }
 /// The element's web classes. Teams signals some states (a raised hand) only through styling.
 func style(_ element: AXUIElement) -> String? {
@@ -60,6 +63,7 @@ func style(_ element: AXUIElement) -> String? {
 let controlRoles: Set<String> = [
 	"AXButton", "AXCheckBox", "AXRadioButton", "AXMenuButton", "AXPopUpButton", "AXMenuItem", "AXToggle", "AXSwitch",
 ]
+let markerContainerRoles: Set<String> = ["AXToolbar", "AXGroup"]
 
 func windows(of app: AXUIElement) -> [AXUIElement] {
 	(value(app, kAXWindowsAttribute) as? [AXUIElement]) ?? []
@@ -86,28 +90,34 @@ func controls(in app: AXUIElement) -> [AXUIElement] {
 struct WindowScan {
 	let found: [String: AXUIElement]
 	let markers: [String]
-	let controlIDs: [String]
+	let markerControlIDs: [String]
 }
 
 func scanWindow(_ root: AXUIElement, wanted: Set<String>, markers: [String], maxNodes: Int = 40_000) -> WindowScan {
 	let markerSet = Set(markers)
 	var seenMarkers = Set<String>()
 	var found: [String: AXUIElement] = [:]
-	var controlIDs: [String] = []
-	var seenControlIDs = Set<String>()
-	var stack = [root]
+	var markerControlIDs: [String] = []
+	var seenMarkerControlIDs = Set<String>()
+	var stack: [(element: AXUIElement, insideMarkerContainer: Bool)] = [(root, false)]
 	var visited = 0
-	while let element = stack.popLast(), visited < maxNodes {
+	while let current = stack.popLast(), visited < maxNodes {
 		visited += 1
-		let id = domID(element)
-		if let id, markerSet.contains(id) { seenMarkers.insert(id) }
-		if let role = string(element, kAXRoleAttribute), controlRoles.contains(role), let id {
-			if wanted.contains(id), found[id] == nil { found[id] = element }
-			if seenControlIDs.insert(id).inserted { controlIDs.append(id) }
+		let element = current.element
+		let role = string(element, kAXRoleAttribute)
+		var insideMarkerContainer = current.insideMarkerContainer
+		if let role, markerContainerRoles.contains(role), let id = domIdentifier(element), markerSet.contains(id) {
+			seenMarkers.insert(id)
+			insideMarkerContainer = true
 		}
-		stack.append(contentsOf: children(element))
+		if let role, controlRoles.contains(role), let id = domID(element) {
+			if markerSet.contains(id) { seenMarkers.insert(id) }
+			if wanted.contains(id), found[id] == nil { found[id] = element }
+			if insideMarkerContainer, seenMarkerControlIDs.insert(id).inserted { markerControlIDs.append(id) }
+		}
+		stack.append(contentsOf: children(element).map { ($0, insideMarkerContainer) })
 	}
-	return WindowScan(found: found, markers: markers.filter { seenMarkers.contains($0) }, controlIDs: controlIDs)
+	return WindowScan(found: found, markers: markers.filter { seenMarkers.contains($0) }, markerControlIDs: markerControlIDs)
 }
 
 // MARK: - State
@@ -121,10 +131,9 @@ var appPID: pid_t = 0
 var axApp: AXUIElement?
 var cache: [String: AXUIElement] = [:]
 var meetingMarkers: [String] = []
-var meetingControlIDs: [String] = []
+var meetingMarkerControlIDs: [String] = []
 var lastDiscovery = Date.distantPast
 var lastStatus = ""
-var lastTeamsChangedLog = ""
 var promptedThisSession = false
 
 func teamsApp() -> NSRunningApplication? {
@@ -149,21 +158,22 @@ func discover(_ app: AXUIElement) {
 	let wanted = Set(watchIDs)
 	var best: [String: AXUIElement] = [:]
 	var bestMarkers: [String] = []
-	var bestControlIDs: [String] = []
+	var bestMarkerControlIDs: [String] = []
 	var bestScore = -1
 	for window in windows(of: app) {
 		let scan = scanWindow(window, wanted: wanted, markers: markerIDs)
-		let score = scan.found.count + (scan.found[anchorID] != nil ? 1000 : 0) + (scan.markers.isEmpty ? 0 : 500)
+		let hasAnchor = scan.found[anchorID] != nil
+		let score = scan.found.count + (hasAnchor ? 1000 : 0) + (!hasAnchor && !scan.markers.isEmpty ? 500 : 0)
 		if score > bestScore {
 			best = scan.found
-			bestMarkers = scan.markers
-			bestControlIDs = scan.controlIDs
+			bestMarkers = hasAnchor ? [] : scan.markers
+			bestMarkerControlIDs = hasAnchor || scan.markers.isEmpty ? [] : scan.markerControlIDs
 			bestScore = score
 		}
 	}
 	cache = best
 	meetingMarkers = bestMarkers
-	meetingControlIDs = bestControlIDs
+	meetingMarkerControlIDs = bestMarkerControlIDs
 }
 
 /// The cached buttons that are still on screen.
@@ -178,24 +188,12 @@ func readButtons() -> [String: [String: Any]] {
 	return buttons
 }
 
-func maybeLogTeamsChanged(buttons: [String: [String: Any]], markers: [String]) {
-	if buttons[anchorID] != nil || markers.isEmpty {
-		lastTeamsChangedLog = ""
-		return
-	}
-	let ids = Array(meetingControlIDs.prefix(60))
-	let more = meetingControlIDs.count > ids.count ? " (+\(meetingControlIDs.count - ids.count) more)" : ""
-	let signature = markers.joined(separator: "|") + "::" + ids.joined(separator: "|") + "::\(meetingControlIDs.count)"
-	guard signature != lastTeamsChangedLog else { return }
-	lastTeamsChangedLog = signature
-	log("teams-changed markers: \(markers.joined(separator: " | ")); control ids: \(ids.isEmpty ? "none" : ids.joined(separator: " | "))\(more)")
-}
-
 func poll() {
 	guard !watchIDs.isEmpty else { return }
 	let trusted = AXIsProcessTrusted()
 	var buttons: [String: [String: Any]] = [:]
 	var markers: [String] = []
+	var markerControlIds: [String] = []
 	var running = false
 
 	if trusted, let app = teamsApp() {
@@ -208,8 +206,7 @@ func poll() {
 			axApp = element
 			cache = [:]
 			meetingMarkers = []
-			meetingControlIDs = []
-			lastTeamsChangedLog = ""
+			meetingMarkerControlIDs = []
 			lastDiscovery = .distantPast
 		}
 		if let app = axApp {
@@ -222,22 +219,21 @@ func poll() {
 			if (stale && since > 2) || since > 10 {
 				discover(app)
 				buttons = readButtons()
-				markers = meetingMarkers
-			} else if !stale {
-				markers = meetingMarkers
 			}
-			maybeLogTeamsChanged(buttons: buttons, markers: markers)
+			if buttons[anchorID] == nil {
+				markers = meetingMarkers
+				markerControlIds = markers.isEmpty ? [] : meetingMarkerControlIDs
+			}
 		}
 	} else if !trusted || teamsApp() == nil {
 		appPID = 0
 		axApp = nil
 		cache = [:]
 		meetingMarkers = []
-		meetingControlIDs = []
-		lastTeamsChangedLog = ""
+		meetingMarkerControlIDs = []
 	}
 
-	let status: [String: Any] = ["type": "status", "trusted": trusted, "running": running, "buttons": buttons, "markers": markers]
+	let status: [String: Any] = ["type": "status", "trusted": trusted, "running": running, "buttons": buttons, "markers": markers, "markerControlIds": markerControlIds]
 	if let data = try? JSONSerialization.data(withJSONObject: status, options: [.sortedKeys]),
 		let line = String(data: data, encoding: .utf8), line != lastStatus
 	{
@@ -351,8 +347,7 @@ func handle(_ line: String) {
 		bundleIDs = message["bundleIds"] as? [String] ?? bundleIDs
 		cache = [:]
 		meetingMarkers = []
-		meetingControlIDs = []
-		lastTeamsChangedLog = ""
+		meetingMarkerControlIDs = []
 		lastDiscovery = .distantPast
 		lastStatus = ""
 		poll()
