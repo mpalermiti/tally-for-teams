@@ -50,11 +50,24 @@ describe("snapshotFrom", () => {
 		expect(live.state).toMatchObject({ isMuted: false, isVideoOn: true });
 	});
 
-	it("reads recording from indicator labels and ids", () => {
+	it("reads recording only from positive indicator labels or labeled recording ids", () => {
+		for (const label of ["Recording", "Recording and transcribing", "This meeting is being recorded"]) {
+			expect(snapshotFrom(status(toolbar, { indicators: [{ role: "AXStaticText", label }] })).state.isRecording).toBe(true);
+		}
+		for (const label of ["Start recording", "Recording stopped", "Not recording", "Recording disabled", "No transcript"]) {
+			expect(snapshotFrom(status(toolbar, { indicators: [{ role: "AXStaticText", label }] })).state.isRecording).toBe(false);
+		}
 		expect(
 			snapshotFrom(
 				status(toolbar, {
-					indicators: [{ id: "call-recording-pill", role: "AXButton", label: "Recording" }],
+					indicators: [{ id: "recording-indicator-container", role: "AXGroup" }],
+				}),
+			).state.isRecording,
+		).toBe(false);
+		expect(
+			snapshotFrom(
+				status(toolbar, {
+					indicators: [{ id: "call-recording-pill", role: "AXButton", label: "On" }],
 				}),
 			).state.isRecording,
 		).toBe(true);

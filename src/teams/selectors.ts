@@ -91,7 +91,7 @@ export const DEFAULT_SELECTORS = {
 	indicatorContainerIds: ["indicators"],
 	recording: {
 		ids: ["record"],
-		labels: "record|transcri",
+		labels: "^(?!.*\\b(start|stop(ped)?|not|no|disabled|off|paused|ended)\\b).*\\b(recording|recorded|transcribing|transcription)\\b",
 	},
 	labelPatterns: {
 		mute: { muted: "^unmute", live: "^mute" },
@@ -339,10 +339,18 @@ function meetingElapsedSeconds(status: BridgeStatus): number | undefined {
 function isRecording(status: BridgeStatus, selectors: Selectors): boolean {
 	const idParts = selectors.recording.ids.map((id) => id.toLowerCase()).filter(Boolean);
 	return (status.indicators ?? []).some((indicator) => {
+		if (indicator.label !== undefined && selectors.recording.labels.test(indicator.label)) return true;
 		const id = indicator.id?.toLowerCase() ?? "";
-		if (idParts.some((part) => id.includes(part))) return true;
-		return indicator.label !== undefined && selectors.recording.labels.test(indicator.label);
+		if (!idParts.some((part) => id.includes(part))) return false;
+		if (indicator.label === undefined || recordingLabelIsNegative(indicator.label)) return false;
+		return true;
 	});
+}
+
+const RECORDING_NEGATIVE_WORDS = /\b(start|stop(?:ped)?|not|no|disabled|off|paused|ended)\b/i;
+
+function recordingLabelIsNegative(label: string): boolean {
+	return RECORDING_NEGATIVE_WORDS.test(label);
 }
 
 function matchKnown(label: string | undefined, truePattern: RegExp, falsePattern: RegExp): boolean | undefined {

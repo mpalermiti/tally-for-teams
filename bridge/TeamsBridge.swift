@@ -110,19 +110,26 @@ func scanWindow(
 	var markerControlIDs: [String] = []
 	var seenMarkerControlIDs = Set<String>()
 	var indicatorContainers: [String: AXUIElement] = [:]
+	var indicatorRanks: [String: Int] = [:]
 	var stack: [(element: AXUIElement, insideMarkerContainer: Bool)] = [(root, false)]
 	var visited = 0
 	while let current = stack.popLast(), visited < maxNodes {
 		visited += 1
 		let element = current.element
 		let role = string(element, kAXRoleAttribute)
-		if let id = domIdentifier(element), indicatorContainerSet.contains(id), indicatorContainers[id] == nil {
-			indicatorContainers[id] = element
-		}
 		var insideMarkerContainer = current.insideMarkerContainer
-		if let role, markerContainerRoles.contains(role), let id = domIdentifier(element), markerSet.contains(id) {
-			seenMarkers.insert(id)
-			insideMarkerContainer = true
+		if let role, markerContainerRoles.contains(role), let id = domIdentifier(element) {
+			if markerSet.contains(id) {
+				seenMarkers.insert(id)
+				insideMarkerContainer = true
+			}
+			if indicatorContainerSet.contains(id) {
+				let rank = role == "AXToolbar" ? 0 : 1
+				if indicatorContainers[id] == nil || rank < (indicatorRanks[id] ?? Int.max) {
+					indicatorContainers[id] = element
+					indicatorRanks[id] = rank
+				}
+			}
 		}
 		if let role, controlRoles.contains(role), let id = domID(element) {
 			if markerSet.contains(id) { seenMarkers.insert(id) }
@@ -244,6 +251,14 @@ func readIndicators(maxNodes: Int = 500, maxItems: Int = 20) -> [[String: Any]] 
 	return indicators
 }
 
+func indicatorContainersStale() -> Bool {
+	guard !indicatorContainerIDs.isEmpty else { return false }
+	for containerID in indicatorContainerIDs {
+		guard let container = indicatorContainers[containerID], !children(container).isEmpty else { return true }
+	}
+	return false
+}
+
 func poll() {
 	guard !watchIDs.isEmpty else { return }
 	let trusted = AXIsProcessTrusted()
@@ -273,7 +288,7 @@ func poll() {
 			// Rediscover (throttled) when the toolbar vanished or any watched button went stale:
 			// Teams rebuilds the toolbar when sharing starts and swaps in the compact view. Also
 			// every 10 s in a meeting, to catch buttons moving in or out of the "More" overflow.
-			let stale = buttons[anchorID] == nil || buttons.count < cache.count
+			let stale = buttons[anchorID] == nil || buttons.count < cache.count || (buttons[anchorID] != nil && indicatorContainersStale())
 			if (stale && since > 2) || since > 10 {
 				discover(app)
 				buttons = readButtons()

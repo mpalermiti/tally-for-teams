@@ -16,6 +16,7 @@ import { muteDialFeedback, timerDataUrl, type Tone } from "../render/key";
 import type { RequestResult, Snapshot } from "../teams/protocol";
 import { HOLD_TO_LEAVE_MS, HoldToConfirm, HoldToggle, RotateToggle, shouldHoldMuteKey, shouldHoldToLeave } from "./gestures";
 import { TeamsKey, type KeySettings } from "./teams-key";
+import { MeetingTimer } from "./timer";
 
 // One class per key: Stream Deck identifies actions by UUID, and each UUID needs its own decorated class.
 // UUIDs must match ai.michaelp.tally.sdPlugin/manifest.json.
@@ -267,7 +268,7 @@ export class PeopleKey extends TeamsKey {
 @action({ UUID: "ai.michaelp.tally.timer" })
 export class TimerKey extends SingletonAction<KeySettings> {
 	#drawn = new Map<string, string>();
-	#starts = new Map<string, number>();
+	#clocks = new Map<string, MeetingTimer>();
 	#timers = new Map<string, ReturnType<typeof setInterval>>();
 
 	constructor(private readonly teams: { snapshot: Snapshot }) {
@@ -300,25 +301,32 @@ export class TimerKey extends SingletonAction<KeySettings> {
 		const snapshot = this.teams.snapshot;
 		if (!snapshot.online) {
 			this.#stop(action.id);
-			this.#starts.delete(action.id);
+			this.#clocks.delete(action.id);
 			await this.#draw(action, undefined, "offline");
 			return;
 		}
 
-		const parsed = snapshot.state.meetingElapsedSeconds;
-		if (!snapshot.state.isInMeeting || parsed === undefined) {
+		if (!snapshot.state.isInMeeting) {
 			this.#stop(action.id);
-			this.#starts.delete(action.id);
+			this.#clocks.delete(action.id);
 			await this.#draw(action, undefined, "idle");
 			return;
 		}
 
-		const now = Date.now();
-		const nextStart = now - parsed * 1000;
-		const currentStart = this.#starts.get(action.id);
-		if (currentStart === undefined || Math.abs(currentStart - nextStart) >= 2_000) this.#starts.set(action.id, nextStart);
-		this.#start(action);
-		await this.#drawRunning(action);
+		const seconds = this.#clock(action.id).update({
+			isInMeeting: true,
+			elapsedSeconds: snapshot.state.meetingElapsedSeconds,
+		});
+		if (seconds !== undefined) this.#start(action);
+		await this.#draw(action, seconds, "ready");
+	}
+
+	#clock(id: string): MeetingTimer {
+		const existing = this.#clocks.get(id);
+		if (existing) return existing;
+		const clock = new MeetingTimer();
+		this.#clocks.set(id, clock);
+		return clock;
 	}
 
 	#start(action: KeyAction<KeySettings>): void {
@@ -333,9 +341,7 @@ export class TimerKey extends SingletonAction<KeySettings> {
 	}
 
 	#drawRunning(action: KeyAction<KeySettings>): Promise<void> {
-		const start = this.#starts.get(action.id);
-		const seconds = start === undefined ? undefined : Math.max(0, Math.floor((Date.now() - start) / 1000));
-		return this.#draw(action, seconds, "ready");
+		return this.#draw(action, this.#clocks.get(action.id)?.currentSeconds(), "ready");
 	}
 
 	async #draw(action: KeyAction<KeySettings>, seconds: number | undefined, tone: Tone): Promise<void> {
