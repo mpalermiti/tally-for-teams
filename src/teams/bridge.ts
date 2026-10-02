@@ -20,6 +20,7 @@ import {
 	meetingMarkerIds,
 	TeamsChangedDebouncer,
 	watchIds,
+	type BridgeCommand,
 	type BridgeStatus,
 	type Selectors,
 } from "./selectors";
@@ -38,10 +39,15 @@ export interface TeamsBridgeOptions {
 	spawn?: (command: string) => BridgeProcess;
 	/** Restart delays after the helper exits; the last value repeats. */
 	backoffMs?: number[];
+	/** Plain press timeout. Kept as the historical option name for compatibility. */
 	requestTimeoutMs?: number;
+	menuRequestTimeoutMs?: number;
+	deadlineSafetyMs?: number;
 	log?: (message: string) => void;
 	selectors?: Selectors;
 	now?: () => number;
+	/** Absolute wall-clock milliseconds, used only for helper deadlines. */
+	wallClockNow?: () => number;
 }
 
 interface Pending {
@@ -52,6 +58,17 @@ interface Pending {
 const STARTING: Snapshot = { online: false, reason: "starting", state: EMPTY_STATE, permissions: NO_PERMISSIONS };
 
 const PERMISSION_HINT = "Allow Stream Deck in System Settings → Privacy & Security → Accessibility";
+export const BRIDGE_PRESS_TIMEOUT_MS = 4_000;
+export const BRIDGE_MENU_TIMEOUT_MS = 6_000;
+export const BRIDGE_DEADLINE_SAFETY_MS = 1_000;
+
+export function commandDeadline(
+	sentAtMs: number,
+	timeoutMs: number,
+	safetyMs = BRIDGE_DEADLINE_SAFETY_MS,
+): number {
+	return Math.floor(sentAtMs + timeoutMs - Math.max(BRIDGE_DEADLINE_SAFETY_MS, safetyMs));
+}
 
 /**
  * Runs the Swift helper that reads Teams through macOS Accessibility, and turns its
@@ -81,7 +98,10 @@ export class TeamsBridge extends EventEmitter<{ change: [Snapshot] }> {
 		this.#options = {
 			spawn: (command) => spawnProcess(command, [], { stdio: ["pipe", "pipe", "inherit"] }) as BridgeProcess,
 			backoffMs: [1_000, 2_000, 5_000, 10_000],
-			requestTimeoutMs: 4_000, // menus take up to ~2 s to open and search
+			requestTimeoutMs: BRIDGE_PRESS_TIMEOUT_MS,
+			menuRequestTimeoutMs: BRIDGE_MENU_TIMEOUT_MS,
+			deadlineSafetyMs: BRIDGE_DEADLINE_SAFETY_MS,
+			wallClockNow: Date.now,
 			...rest,
 		};
 	}
@@ -118,13 +138,15 @@ export class TeamsBridge extends EventEmitter<{ change: [Snapshot] }> {
 		if (!this.#process || !this.#snapshot.online) return { ok: false, message: "Teams isn't running" };
 
 		const req = this.#nextRequestId++;
+		const timeoutMs = timeoutForCommand(command, this.#options);
+		const deadline = commandDeadline(this.#options.wallClockNow(), timeoutMs, this.#options.deadlineSafetyMs);
 		return new Promise((resolve) => {
 			const timer = setTimeout(() => {
 				this.#pending.delete(req);
 				resolve({ ok: false, message: "Teams didn't respond" });
-			}, this.#options.requestTimeoutMs);
+			}, timeoutMs);
 			this.#pending.set(req, { resolve, timer });
-			this.#write({ ...command, req });
+			this.#write({ ...command, req, deadline });
 		});
 	}
 
@@ -156,7 +178,7 @@ export class TeamsBridge extends EventEmitter<{ change: [Snapshot] }> {
 	}
 
 	#handle(line: string): void {
-		let message: { type?: string; req?: number; ok?: boolean; message?: string; selected?: boolean } & Partial<BridgeStatus>;
+		let message: { type?: string; req?: number; ok?: boolean; message?: string; error?: string; selected?: boolean } & Partial<BridgeStatus>;
 		try {
 			message = JSON.parse(line);
 		} catch {
@@ -177,7 +199,7 @@ export class TeamsBridge extends EventEmitter<{ change: [Snapshot] }> {
 			clearTimeout(pending.timer);
 			pending.resolve({
 				ok: message.ok === true,
-				message: message.message ?? "",
+				message: message.message ?? message.error ?? "",
 				...(typeof message.selected === "boolean" ? { selected: message.selected } : {}),
 			});
 		} else if (message.type === "log" && message.message) {
@@ -257,4 +279,11 @@ export class TeamsBridge extends EventEmitter<{ change: [Snapshot] }> {
 		this.#snapshot = snapshot;
 		this.emit("change", snapshot);
 	}
+}
+
+function timeoutForCommand(
+	command: BridgeCommand,
+	options: { requestTimeoutMs: number; menuRequestTimeoutMs: number },
+): number {
+	return command.cmd === "menu" ? options.menuRequestTimeoutMs : options.requestTimeoutMs;
 }

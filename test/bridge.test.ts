@@ -2,7 +2,7 @@ import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { TeamsBridge, type BridgeProcess } from "../src/teams/bridge";
+import { BRIDGE_DEADLINE_SAFETY_MS, TeamsBridge, commandDeadline, type BridgeProcess } from "../src/teams/bridge";
 import type { Snapshot } from "../src/teams/protocol";
 import { ANCHOR_ID, BUTTON_IDS } from "../src/teams/selectors";
 
@@ -121,6 +121,62 @@ describe("TeamsBridge", () => {
 		expect(sent).toMatchObject({ cmd: "press", id: BUTTON_IDS.mute, req: expect.any(Number) });
 		latest().say({ type: "result", req: sent.req, ok: true, message: "pressed" });
 		await expect(pending).resolves.toEqual({ ok: true, message: "pressed" });
+	});
+
+	it("adds an absolute deadline to commands that act on Teams", async () => {
+		const sentAt = 1_800_000_000_000;
+		start({ requestTimeoutMs: 4_000, menuRequestTimeoutMs: 6_000, wallClockNow: () => sentAt });
+		latest().status({ [BUTTON_IDS.mute]: "Mute mic" });
+		await until(() => bridge.snapshot.online);
+
+		const press = bridge.request("toggle-mute");
+		await until(() => latest().written.some((m) => m.cmd === "press"));
+		const sentPress = latest().written.find((m) => m.cmd === "press");
+		expect(sentPress).toMatchObject({
+			cmd: "press",
+			deadline: sentAt + 4_000 - BRIDGE_DEADLINE_SAFETY_MS,
+		});
+		latest().say({ type: "result", req: sentPress.req, ok: true, message: "pressed" });
+		await expect(press).resolves.toMatchObject({ ok: true });
+
+		const menu = bridge.request("send-reaction", { type: "like" });
+		await until(() => latest().written.some((m) => m.cmd === "menu"));
+		const sentMenu = latest().written.find((m) => m.cmd === "menu");
+		expect(sentMenu).toMatchObject({
+			cmd: "menu",
+			deadline: sentAt + 6_000 - BRIDGE_DEADLINE_SAFETY_MS,
+		});
+		latest().say({ type: "result", req: sentMenu.req, ok: true, message: "pressed" });
+		await expect(menu).resolves.toMatchObject({ ok: true });
+	});
+
+	it("keeps menu requests alive longer than plain presses", async () => {
+		start({ requestTimeoutMs: 100, menuRequestTimeoutMs: 600 });
+		latest().status({ [BUTTON_IDS.mute]: "Mute mic" });
+		await until(() => bridge.snapshot.online);
+		vi.useFakeTimers();
+
+		const press = bridge.request("toggle-mute");
+		const menu = bridge.request("send-reaction", { type: "like" });
+		await Promise.resolve();
+		await Promise.resolve();
+		let menuSettled = false;
+		void menu.then(() => {
+			menuSettled = true;
+		});
+
+		await vi.advanceTimersByTimeAsync(100);
+		await expect(press).resolves.toEqual({ ok: false, message: "Teams didn't respond" });
+		expect(menuSettled).toBe(false);
+
+		await vi.advanceTimersByTimeAsync(500);
+		await expect(menu).resolves.toEqual({ ok: false, message: "Teams didn't respond" });
+	});
+
+	it("computes deadlines with at least one second of helper-side safety", () => {
+		expect(commandDeadline(10_000, 4_000)).toBe(13_000);
+		expect(commandDeadline(10_000, 4_000, 250)).toBe(13_000);
+		expect(commandDeadline(10_000, 4_000, 1_500)).toBe(12_500);
 	});
 
 	it("passes a failed press through, so the key can flash an alert", async () => {

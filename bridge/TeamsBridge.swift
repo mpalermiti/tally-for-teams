@@ -7,8 +7,8 @@
 //
 // Protocol: one JSON object per line.
 //   stdin  {"cmd":"watch","ids":["microphone-button",…],"anchor":"microphone-button","markers":["hangup-button",…],"indicatorContainers":["indicators"],"bundleIds":["com.microsoft.teams2"]}
-//          {"cmd":"press","req":1,"id":"microphone-button"}
-//          {"cmd":"menu","req":2,"id":"reaction-menu-button","itemIds":["like-button"],"labels":["like"],"excludeLabels":["none"]}
+//          {"cmd":"press","req":1,"id":"microphone-button","deadline":1800000003000}
+//          {"cmd":"menu","req":2,"id":"reaction-menu-button","deadline":1800000005000,"itemIds":["like-button"],"labels":["like"],"excludeLabels":["none"]}
 //                                                                                 open a menu, press the new item (id first, then label)
 //          {"cmd":"menu","req":3,"id":"video-button-configure","toggle":{"on":{"itemIds":[],"labels":["standard blur","blur"],"excludeLabels":["no background effect","none"]},"off":{"itemIds":[],"labels":["no background effect","none"]}}}
 //                                                                                 open video options and choose blur on/off from fresh selected state
@@ -489,6 +489,21 @@ func result(_ req: Any?, _ ok: Bool, _ message: String, extra: [String: Any] = [
 	send(payload)
 }
 
+func deadlineMilliseconds(_ raw: Any?) -> Double? {
+	if let number = raw as? NSNumber { return number.doubleValue }
+	if let string = raw as? String { return Double(string) }
+	return nil
+}
+
+func deadlinePassed(_ raw: Any?) -> Bool {
+	guard let deadline = deadlineMilliseconds(raw) else { return false }
+	return Date().timeIntervalSince1970 * 1000 >= deadline
+}
+
+func expired(_ req: Any?) {
+	result(req, false, "expired", extra: ["error": "expired"])
+}
+
 func element(for id: String) -> AXUIElement? {
 	if let cached = cache[id], label(cached) != nil { return cached }
 	guard let app = axApp else { return nil }
@@ -496,7 +511,8 @@ func element(for id: String) -> AXUIElement? {
 	return cache[id]
 }
 
-func press(_ id: String, req: Any?) {
+func press(_ id: String, req: Any?, deadline: Any?) {
+	guard !deadlinePassed(deadline) else { return expired(req) }
 	guard AXIsProcessTrusted() else { return result(req, false, "Accessibility permission is off") }
 	guard axApp != nil else { return result(req, false, "Teams isn't running") }
 	guard var button = element(for: id) else { return result(req, false, "No \(id) on screen") }
@@ -509,6 +525,7 @@ func press(_ id: String, req: Any?) {
 		}
 	}
 	guard pressable else { return result(req, false, "No AXPress action for \(id)") }
+	guard !deadlinePassed(deadline) else { return expired(req) }
 	let error = AXUIElementPerformAction(button, kAXPressAction as CFString)
 	result(req, error == .success, error == .success ? "pressed" : "AXError \(error.rawValue)")
 	// Pick up the new label promptly instead of waiting for the next tick.
@@ -635,12 +652,15 @@ func menu(
 	excludeLabels: [String],
 	toggle: [String: Any]? = nil,
 	escapeIfNoFreshItems: MenuEscapeIfNoFreshItems = .always,
-	req: Any?
+	req: Any?,
+	deadline: Any?
 ) {
+	guard !deadlinePassed(deadline) else { return expired(req) }
 	guard AXIsProcessTrusted() else { return result(req, false, "Accessibility permission is off") }
 	guard let app = axApp else { return result(req, false, "Teams isn't running") }
 	guard let button = element(for: id) else { return result(req, false, "No \(id) on screen") }
 	guard ensurePressable(button) else { return result(req, false, "No AXPress action for \(id)") }
+	guard !deadlinePassed(deadline) else { return expired(req) }
 
 	let before = controls(in: app)
 	let opened = AXUIElementPerformAction(button, kAXPressAction as CFString)
@@ -662,12 +682,20 @@ func menu(
 			item = firstMatch(in: fresh, selector: selector)
 		}
 	}
-	let deadline = Date().addingTimeInterval(1.5)
-	while Date() < deadline {
+	let searchDeadline = Date().addingTimeInterval(1.5)
+	while Date() < searchDeadline {
+		if deadlinePassed(deadline) {
+			closeMenu(app, items: fresh, button: button, escapeIfNoFreshItems: escapeIfNoFreshItems)
+			return expired(req)
+		}
 		Thread.sleep(forTimeInterval: 0.1)
 		refreshFreshItems()
 		if toggle != nil, onItem != nil || offItem != nil { break }
 		if toggle == nil, item != nil { break }
+	}
+	if deadlinePassed(deadline) {
+		closeMenu(app, items: fresh, button: button, escapeIfNoFreshItems: escapeIfNoFreshItems)
+		return expired(req)
 	}
 
 	if toggle != nil {
@@ -697,6 +725,10 @@ func menu(
 			let missing = decision.target == "off" ? "'No background effect'" : "Background blur"
 			return result(req, false, "No \(missing) item in \(id) menu; it offered: \(offeredDescription(fresh))")
 		}
+		if deadlinePassed(deadline) {
+			closeMenu(app, items: fresh, button: button, escapeIfNoFreshItems: escapeIfNoFreshItems)
+			return expired(req)
+		}
 		let error = AXUIElementPerformAction(chosen.element, kAXPressAction as CFString)
 		if error == .success {
 			if decision.memoryAfterSuccess {
@@ -714,9 +746,9 @@ func menu(
 			offState: offItem?.state,
 			hasReadableSelection: hasReadableSelection
 		)
+		result(req, error == .success, error == .success ? "pressed \(pressedLabel); selection: \(seen)" : "AXError \(error.rawValue); selection: \(seen)", extra: extra)
 		Thread.sleep(forTimeInterval: 0.3)
 		closeMenu(app, items: fresh, button: button, escapeIfNoFreshItems: escapeIfNoFreshItems)
-		result(req, error == .success, error == .success ? "pressed \(pressedLabel); selection: \(seen)" : "AXError \(error.rawValue); selection: \(seen)", extra: extra)
 		DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: poll)
 		return
 	}
@@ -725,13 +757,17 @@ func menu(
 		closeMenu(app, items: fresh, button: button, escapeIfNoFreshItems: escapeIfNoFreshItems)
 		return result(req, false, "No \(itemIds.first ?? labels.first ?? "item") in \(id) menu; it offered: \(offeredDescription(fresh))")
 	}
+	if deadlinePassed(deadline) {
+		closeMenu(app, items: fresh, button: button, escapeIfNoFreshItems: escapeIfNoFreshItems)
+		return expired(req)
+	}
 	let error = AXUIElementPerformAction(item.element, kAXPressAction as CFString)
 	let pressedLabel = label(item.element) ?? domID(item.element) ?? "item"
 	var extra: [String: Any] = [:]
 	if let selected = item.state { extra["selected"] = selected }
+	result(req, error == .success, error == .success ? "pressed \(pressedLabel)" : "AXError \(error.rawValue)", extra: extra)
 	Thread.sleep(forTimeInterval: 0.3)
 	closeMenu(app, items: fresh, button: button, escapeIfNoFreshItems: escapeIfNoFreshItems)
-	result(req, error == .success, error == .success ? "pressed \(pressedLabel)" : "AXError \(error.rawValue)", extra: extra)
 	DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: poll)
 }
 
@@ -800,7 +836,7 @@ func handle(_ line: String) {
 		lastStatus = ""
 		poll()
 	case "press":
-		press(message["id"] as? String ?? "", req: message["req"])
+		press(message["id"] as? String ?? "", req: message["req"], deadline: message["deadline"])
 	case "menu":
 		menu(
 			message["id"] as? String ?? "",
@@ -809,7 +845,8 @@ func handle(_ line: String) {
 			excludeLabels: message["excludeLabels"] as? [String] ?? [],
 			toggle: message["toggle"] as? [String: Any],
 			escapeIfNoFreshItems: MenuEscapeIfNoFreshItems(rawValue: message["escapeIfNoFreshItems"] as? String ?? "") ?? .always,
-			req: message["req"]
+			req: message["req"],
+			deadline: message["deadline"]
 		)
 	case "prompt":
 		if !promptedThisSession {
