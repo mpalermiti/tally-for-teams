@@ -15,13 +15,14 @@ export type HoldReleaseResult =
 	| { toggledBack: false }
 	| { toggledBack: true; result: RequestResult };
 
-export async function resolveHoldRelease({
+async function waitForAppliedToggle({
 	startMuted,
 	press,
 	currentMuted,
 	waitForChange,
 	timeoutMs = DEFAULT_HOLD_RELEASE_TIMEOUT_MS,
 	warn,
+	timeoutWarning,
 }: {
 	startMuted: boolean | undefined;
 	press: Promise<RequestResult>;
@@ -29,6 +30,7 @@ export async function resolveHoldRelease({
 	waitForChange: MuteChangeWaiter;
 	timeoutMs?: number;
 	warn?: (message: string) => void;
+	timeoutWarning: string;
 }): Promise<boolean> {
 	const result = await press;
 	if (!result.ok || startMuted === undefined) return false;
@@ -38,8 +40,22 @@ export async function resolveHoldRelease({
 
 	if (await waitForChange(startMuted, timeoutMs)) return true;
 
-	warn?.("Teams accepted the held mute press but never reported the mic state change; not toggling back");
+	warn?.(timeoutWarning);
 	return false;
+}
+
+export async function resolveHoldRelease(options: {
+	startMuted: boolean | undefined;
+	press: Promise<RequestResult>;
+	currentMuted: MuteGetter;
+	waitForChange: MuteChangeWaiter;
+	timeoutMs?: number;
+	warn?: (message: string) => void;
+}): Promise<boolean> {
+	return waitForAppliedToggle({
+		...options,
+		timeoutWarning: "Teams accepted the held mute press but never reported the mic state change; not toggling back",
+	});
 }
 
 /**
@@ -49,17 +65,30 @@ export async function resolveHoldRelease({
 export class HoldToggle {
 	#down: { at: number; muted: boolean | undefined; press: Promise<RequestResult> } | undefined;
 	#downReady: Promise<void> | undefined;
-	#release: Promise<unknown> = Promise.resolve();
+	#release: Promise<void> = Promise.resolve();
+	#releasePending = false;
 
 	constructor(
 		private readonly thresholdMs = 400,
 		private readonly now: () => number = () => performance.now(),
 	) {}
 
+	get hasHold(): boolean {
+		return this.#down !== undefined || this.#downReady !== undefined;
+	}
+
+	get idle(): boolean {
+		return !this.hasHold && !this.#releasePending;
+	}
+
+	whenIdle(): Promise<void> {
+		return this.#release;
+	}
+
 	/** Always toggles; remembers the state it started from. */
 	down(currentMuted: MuteGetter, press: () => Promise<RequestResult>): Promise<RequestResult> {
 		const at = this.now();
-		let request: Promise<RequestResult>;
+		let request!: Promise<RequestResult>;
 		const started = this.#release.then(() => {
 			const muted = currentMuted();
 			request = press();
@@ -96,7 +125,18 @@ export class HoldToggle {
 			if (this.#downReady === downReady) this.#downReady = undefined;
 			if (!down) return { toggledBack: false };
 			const held = releasedAt - down.at >= this.thresholdMs;
-			if (!held) return { toggledBack: false };
+			if (!held) {
+				await waitForAppliedToggle({
+					startMuted: down.muted,
+					press: down.press,
+					currentMuted,
+					waitForChange,
+					timeoutMs,
+					warn,
+					timeoutWarning: "Teams accepted the mute press but never reported the mic state change; continuing queued presses",
+				});
+				return { toggledBack: false };
+			}
 
 			const shouldToggleBack = await resolveHoldRelease({
 				startMuted: down.muted,
@@ -107,12 +147,30 @@ export class HoldToggle {
 				warn,
 			});
 			if (!shouldToggleBack) return { toggledBack: false };
-			return { toggledBack: true, result: await toggleBack() };
+			const result = await toggleBack();
+			if (result.ok && down.muted !== undefined) {
+				await waitForAppliedToggle({
+					startMuted: !down.muted,
+					press: Promise.resolve(result),
+					currentMuted,
+					waitForChange,
+					timeoutMs,
+					warn,
+					timeoutWarning:
+						"Teams accepted the held mute release but never reported the restored mic state; continuing queued presses",
+				});
+			}
+			return { toggledBack: true, result };
 		})();
-		this.#release = release.then(
+		const queued = release.then(
 			() => undefined,
 			() => undefined,
 		);
+		this.#release = queued;
+		this.#releasePending = true;
+		void queued.finally(() => {
+			if (this.#release === queued) this.#releasePending = false;
+		});
 		return release;
 	}
 }

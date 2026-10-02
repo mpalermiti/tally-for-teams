@@ -1,6 +1,5 @@
 import {
 	action,
-	type DialAction,
 	type DialDownEvent,
 	type DialRotateEvent,
 	type DialUpEvent,
@@ -12,7 +11,7 @@ import {
 } from "@elgato/streamdeck";
 
 import { muteDialFeedback } from "../render/key";
-import type { Snapshot } from "../teams/protocol";
+import type { RequestResult, Snapshot } from "../teams/protocol";
 import { HOLD_TO_LEAVE_MS, HoldToConfirm, HoldToggle, RotateToggle, shouldHoldMuteKey, shouldHoldToLeave } from "./gestures";
 import { TeamsKey, type KeySettings } from "./teams-key";
 
@@ -46,15 +45,22 @@ export class MuteKey extends TeamsKey {
 	override async onKeyUp(ev: KeyUpEvent<KeySettings>): Promise<void> {
 		const hold = this.#keyHolds.get(ev.action.id);
 		if (!hold) return;
-		await this.#releaseHold(hold, ev.action, true);
+		await this.#releaseHold(hold, (result) => this.reportResult(ev.action, result, { alert: true }));
+		this.#dropKeyHoldWhenIdle(ev.action.id, hold);
 	}
 
 	override onWillDisappear(ev: WillDisappearEvent<KeySettings>): void {
-		const hold = this.#keyHolds.get(ev.action.id);
-		if (hold) {
-			void this.#releaseHold(hold, ev.action, false).finally(() => {
-				if (this.#keyHolds.get(ev.action.id) === hold) this.#keyHolds.delete(ev.action.id);
-			});
+		if (ev.payload.controller === "Encoder") {
+			if (this.#dialHold.hasHold) void this.#releaseHold(this.#dialHold, (result) => this.#logReleaseFailure(result));
+		} else {
+			const hold = this.#keyHolds.get(ev.action.id);
+			if (hold?.hasHold) {
+				void this.#releaseHold(hold, (result) => this.#logReleaseFailure(result)).finally(() =>
+					this.#dropKeyHoldWhenIdle(ev.action.id, hold),
+				);
+			} else if (hold) {
+				this.#dropKeyHoldWhenIdle(ev.action.id, hold);
+			}
 		}
 		super.onWillDisappear(ev);
 	}
@@ -64,7 +70,7 @@ export class MuteKey extends TeamsKey {
 	}
 
 	override async onDialUp(ev: DialUpEvent<KeySettings>): Promise<void> {
-		await this.#releaseHold(this.#dialHold, ev.action, true);
+		await this.#releaseHold(this.#dialHold, (result) => this.reportResult(ev.action, result, { alert: true }));
 	}
 
 	override async onDialRotate(ev: DialRotateEvent<KeySettings>): Promise<void> {
@@ -88,14 +94,30 @@ export class MuteKey extends TeamsKey {
 		return hold;
 	}
 
-	async #releaseHold(hold: HoldToggle, action: KeyAction<KeySettings> | DialAction<KeySettings>, alert: boolean): Promise<void> {
+	async #releaseHold(hold: HoldToggle, report: (result: RequestResult) => Promise<void> | void): Promise<void> {
+		if (!hold.hasHold) return;
 		const result = await hold.up({
 			currentMuted: () => this.#muted,
 			waitForChange: (startMuted, timeoutMs) => this.#waitForMuteChange(startMuted, timeoutMs),
 			warn: (message) => this.warn(message),
-			toggleBack: () => this.press(),
+			toggleBack: () => this.teams.request("toggle-mute"),
 		});
-		if (result.toggledBack) await this.reportResult(action, result.result, { alert });
+		if (result.toggledBack) await report(result.result);
+	}
+
+	#logReleaseFailure(result: RequestResult): void {
+		if (!result.ok) this.warn(result.message);
+	}
+
+	#dropKeyHoldWhenIdle(id: string, hold: HoldToggle): void {
+		if (this.#keyHolds.get(id) !== hold) return;
+		if (hold.idle) {
+			this.#keyHolds.delete(id);
+			return;
+		}
+		void hold.whenIdle().finally(() => {
+			if (this.#keyHolds.get(id) === hold && hold.idle) this.#keyHolds.delete(id);
+		});
 	}
 
 	#waitForMuteChange(startMuted: boolean, timeoutMs: number): Promise<boolean> {

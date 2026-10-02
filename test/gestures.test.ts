@@ -10,7 +10,10 @@ import {
 } from "../src/actions/gestures";
 import type { RequestResult } from "../src/teams/protocol";
 
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+	vi.useRealTimers();
+	vi.restoreAllMocks();
+});
 
 /** A controllable clock. */
 function clock(start = 1_000) {
@@ -32,6 +35,55 @@ function deferred<T>() {
 		resolve = r;
 	});
 	return { promise, resolve };
+}
+
+function delayedTeamsMute(initialMuted: boolean) {
+	let actual = initialMuted;
+	let reported = initialMuted;
+	const waiters = new Set<() => void>();
+
+	const notify = () => {
+		for (const waiter of [...waiters]) waiter();
+	};
+	const waitUntil = (condition: () => boolean, timeoutMs: number) => {
+		if (condition()) return Promise.resolve(true);
+		return new Promise<boolean>((resolve) => {
+			let settled = false;
+			let timer: ReturnType<typeof setTimeout>;
+			const finish = (matched: boolean) => {
+				if (settled) return;
+				settled = true;
+				clearTimeout(timer);
+				waiters.delete(check);
+				resolve(matched);
+			};
+			const check = () => {
+				if (condition()) finish(true);
+			};
+			waiters.add(check);
+			timer = setTimeout(() => finish(false), timeoutMs);
+		});
+	};
+
+	return {
+		get actual() {
+			return actual;
+		},
+		get reported() {
+			return reported;
+		},
+		current: () => reported,
+		pressWithReportLag: (lagMs: number) => {
+			const next = !actual;
+			actual = next;
+			setTimeout(() => {
+				reported = next;
+				notify();
+			}, lagMs);
+			return Promise.resolve(OK);
+		},
+		waitForChange: (startMuted: boolean, timeoutMs: number) => waitUntil(() => reported !== startMuted, timeoutMs),
+	};
 }
 
 describe("resolveHoldRelease", () => {
@@ -272,6 +324,53 @@ describe("HoldToggle", () => {
 		await expect(secondDown).resolves.toBe(OK);
 		await expect(secondRelease).resolves.toMatchObject({ toggledBack: true, result: OK });
 		expect(muted).toBe(true);
+	});
+
+	async function expectQuickSecondHoldRestores(initialMuted: boolean) {
+		vi.useFakeTimers();
+		const c = clock();
+		const mic = delayedTeamsMute(initialMuted);
+		const hold = new HoldToggle(400, c.now);
+		const releaseOptions = () => ({
+			...releaseDefaults(),
+			currentMuted: mic.current,
+			waitForChange: mic.waitForChange,
+		});
+
+		await hold.down(mic.current, () => mic.pressWithReportLag(150));
+		await vi.advanceTimersByTimeAsync(150);
+		expect(mic.reported).toBe(!initialMuted);
+
+		c.advance(900);
+		const firstRelease = hold.up({
+			...releaseOptions(),
+			toggleBack: () => mic.pressWithReportLag(150),
+		});
+
+		c.advance(10);
+		const secondDown = hold.down(mic.current, () => mic.pressWithReportLag(500));
+		await vi.advanceTimersByTimeAsync(550);
+
+		c.advance(700);
+		const secondRelease = hold.up({
+			...releaseOptions(),
+			toggleBack: () => mic.pressWithReportLag(150),
+		});
+
+		await vi.advanceTimersByTimeAsync(2_000);
+		await expect(firstRelease).resolves.toMatchObject({ toggledBack: true, result: OK });
+		await expect(secondDown).resolves.toBe(OK);
+		await expect(secondRelease).resolves.toMatchObject({ toggledBack: true, result: OK });
+		expect(mic.actual).toBe(initialMuted);
+		expect(mic.reported).toBe(initialMuted);
+	}
+
+	it("keeps push-to-talk muted after a quick second hold with delayed Teams reports", async () => {
+		await expectQuickSecondHoldRestores(true);
+	});
+
+	it("keeps the cough button live after a quick second hold with delayed Teams reports", async () => {
+		await expectQuickSecondHoldRestores(false);
 	});
 });
 
