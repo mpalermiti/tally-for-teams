@@ -43,8 +43,27 @@ describe("site", () => {
 		expect(html).toContain('<source media="(max-width: 734px)" srcset="art/keys-compact.svg" width="720" height="420">');
 	});
 
-	it("runs no scripts", () => {
-		expect(html).not.toMatch(/<script/i);
+	it("runs no scripts (structured data for search engines is just JSON)", () => {
+		expect(html.replace(/<script type="application\/ld\+json">[\s\S]*?<\/script>/gi, "")).not.toMatch(/<script/i);
+	});
+
+	it("tells search engines it's a free macOS app", () => {
+		const block = /<script type="application\/ld\+json">([\s\S]*?)<\/script>/i.exec(html);
+		expect(block, "JSON-LD block").not.toBeNull();
+		expect(JSON.parse(block![1])).toMatchObject({
+			"@context": "https://schema.org",
+			"@type": "SoftwareApplication",
+			name: "Tally for Teams",
+			operatingSystem: expect.stringContaining("macOS"),
+			url: "https://mpalermiti.github.io/tally-for-teams/",
+			downloadUrl: "https://github.com/mpalermiti/tally-for-teams/releases/latest/download/Tally.streamDeckPlugin",
+			offers: { "@type": "Offer", price: "0" },
+		});
+	});
+
+	it("names what people search for in the title", () => {
+		const title = /<title>([^<]+)<\/title>/.exec(html)?.[1] ?? "";
+		for (const word of ["Microsoft Teams", "plugin", "Stream Deck", "Mac"]) expect(title).toContain(word);
 	});
 
 	it("describes every image", () => {
