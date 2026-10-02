@@ -4,7 +4,7 @@
  * based on the current mute state.
  */
 
-import type { RequestResult } from "../teams/protocol";
+import type { RequestResult, Snapshot } from "../teams/protocol";
 
 const DEFAULT_HOLD_RELEASE_TIMEOUT_MS = 1_500;
 
@@ -14,6 +14,13 @@ type MuteChangeWaiter = (startMuted: boolean, timeoutMs: number) => Promise<bool
 export type HoldReleaseResult =
 	| { toggledBack: false }
 	| { toggledBack: true; result: RequestResult };
+
+export function muteStateForGesture(snapshot: Snapshot): boolean | undefined {
+	if (!snapshot.online || snapshot.reason === "teams-changed" || !snapshot.state.isInMeeting || !snapshot.state.isMuteKnown) {
+		return undefined;
+	}
+	return snapshot.state.isMuted;
+}
 
 async function waitForAppliedToggle({
 	startMuted,

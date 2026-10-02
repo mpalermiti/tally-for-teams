@@ -4,11 +4,12 @@ import {
 	HoldToConfirm,
 	HoldToggle,
 	RotateToggle,
+	muteStateForGesture,
 	resolveHoldRelease,
 	shouldHoldMuteKey,
 	shouldHoldToLeave,
 } from "../src/actions/gestures";
-import type { RequestResult } from "../src/teams/protocol";
+import { EMPTY_STATE, NO_PERMISSIONS, type RequestResult, type Snapshot } from "../src/teams/protocol";
 
 afterEach(() => {
 	vi.useRealTimers();
@@ -83,6 +84,15 @@ function delayedTeamsMute(initialMuted: boolean) {
 			return Promise.resolve(OK);
 		},
 		waitForChange: (startMuted: boolean, timeoutMs: number) => waitUntil(() => reported !== startMuted, timeoutMs),
+	};
+}
+
+function meetingSnapshot(state: Partial<Snapshot["state"]> = {}, snapshot: Partial<Snapshot> = {}): Snapshot {
+	return {
+		online: true,
+		state: { ...EMPTY_STATE, isInMeeting: true, ...state },
+		permissions: NO_PERMISSIONS,
+		...snapshot,
 	};
 }
 
@@ -515,6 +525,31 @@ describe("HoldToggle", () => {
 		expect(coughReads).toBe(1);
 		expect(muted).toBe(false);
 	});
+
+	it.each([
+		["Teams changed", meetingSnapshot({ isMuteKnown: true, isMuted: false }, { reason: "teams-changed" })],
+		["offline", meetingSnapshot({ isMuteKnown: true, isMuted: false }, { online: false, reason: "teams-not-running" })],
+		["not in a meeting", meetingSnapshot({ isInMeeting: false, isMuteKnown: true, isMuted: false })],
+	])("treats a hold during %s as unknown and toggles back after a successful first press", async (_label, snapshot) => {
+		const c = clock();
+		const hold = new HoldToggle(400, c.now);
+		const waitForChange = vi.fn(() => Promise.resolve(true));
+		const toggleBack = vi.fn(() => Promise.resolve(OK));
+
+		await expect(hold.down(() => muteStateForGesture(snapshot), () => Promise.resolve(OK))).resolves.toBe(OK);
+		c.advance(900);
+		await expect(
+			hold.up({
+				...releaseDefaults(),
+				currentMuted: () => muteStateForGesture(snapshot),
+				waitForChange,
+				toggleBack,
+			}),
+		).resolves.toMatchObject({ toggledBack: true, result: OK });
+
+		expect(waitForChange).not.toHaveBeenCalled();
+		expect(toggleBack).toHaveBeenCalledTimes(1);
+	});
 });
 
 describe("RotateToggle", () => {
@@ -536,6 +571,12 @@ describe("RotateToggle", () => {
 		const rotate = new RotateToggle();
 		expect(rotate.shouldToggle(2, undefined)).toBe(false);
 		expect(rotate.shouldToggle(-2, undefined)).toBe(false);
+	});
+
+	it("does nothing during Teams changed because the dial mute state is unknown", () => {
+		const rotate = new RotateToggle();
+		const teamsChanged = meetingSnapshot({ isMuteKnown: true, isMuted: false }, { reason: "teams-changed" });
+		expect(rotate.shouldToggle(-1, muteStateForGesture(teamsChanged))).toBe(false);
 	});
 
 	it("ignores the burst of ticks from one turn while Teams catches up", () => {

@@ -14,7 +14,15 @@ import {
 
 import { muteDialFeedback, timerDataUrl, type Tone } from "../render/key";
 import type { RequestResult, Snapshot } from "../teams/protocol";
-import { HOLD_TO_LEAVE_MS, HoldToConfirm, HoldToggle, RotateToggle, shouldHoldMuteKey, shouldHoldToLeave } from "./gestures";
+import {
+	HOLD_TO_LEAVE_MS,
+	HoldToConfirm,
+	HoldToggle,
+	RotateToggle,
+	muteStateForGesture,
+	shouldHoldMuteKey,
+	shouldHoldToLeave,
+} from "./gestures";
 import { TeamsKey, type KeySettings } from "./teams-key";
 import { KeyedMeetingTimers } from "./timer";
 
@@ -85,8 +93,7 @@ export class MuteKey extends TeamsKey {
 	}
 
 	get #muted(): boolean | undefined {
-		const { state } = this.teams.snapshot;
-		return state.isMuteKnown ? state.isMuted : undefined;
+		return muteStateForGesture(this.teams.snapshot);
 	}
 
 	#keyHold(id: string): HoldToggle {
@@ -137,7 +144,7 @@ export class MuteKey extends TeamsKey {
 				resolve(flipped);
 			};
 			const onChange = (snapshot: Snapshot) => {
-				const muted = snapshot.state.isMuteKnown ? snapshot.state.isMuted : undefined;
+				const muted = muteStateForGesture(snapshot);
 				if (muted !== undefined && muted !== startMuted) finish(true);
 			};
 			this.teams.on("change", onChange);

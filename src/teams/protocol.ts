@@ -90,6 +90,13 @@ export const EMPTY_STATE: MeetingState = {
 	isRecording: false,
 };
 
+export const UNKNOWN_CONTROL_STATE: MeetingState = {
+	...EMPTY_STATE,
+	isMuteKnown: false,
+	isVideoKnown: false,
+	isSharingKnown: false,
+};
+
 export const NO_PERMISSIONS: MeetingPermissions = {
 	canToggleMute: false,
 	canToggleVideo: false,

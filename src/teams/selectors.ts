@@ -15,6 +15,7 @@
 import {
 	EMPTY_STATE,
 	NO_PERMISSIONS,
+	UNKNOWN_CONTROL_STATE,
 	type ActionParameters,
 	type Reaction,
 	type Snapshot,
@@ -206,7 +207,7 @@ export function snapshotFrom(status: BridgeStatus, selectors: Selectors = DEFAUL
 
 	const mic = label(selectors.buttonIds.mute);
 	if (mic === undefined && hasMeetingMarkers(status, selectors)) {
-		return { online: true, reason: "teams-changed", state: EMPTY_STATE, permissions: NO_PERMISSIONS };
+		return { online: true, reason: "teams-changed", state: UNKNOWN_CONTROL_STATE, permissions: NO_PERMISSIONS };
 	}
 
 	const camera = label(selectors.buttonIds.camera);
@@ -293,7 +294,7 @@ export class TeamsChangedDebouncer {
 			this.#pendingSignature = signature;
 		}
 		if (this.now() - this.#pendingSince >= this.debounceMs) return snapshot;
-		return this.#lastStable ?? { online: true, state: EMPTY_STATE, permissions: NO_PERMISSIONS };
+		return this.#lastStable ?? { online: true, state: UNKNOWN_CONTROL_STATE, permissions: NO_PERMISSIONS };
 	}
 }
 

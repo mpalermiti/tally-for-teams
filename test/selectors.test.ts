@@ -160,7 +160,7 @@ describe("snapshotFrom", () => {
 		expect(s).toMatchObject({
 			online: true,
 			reason: "teams-changed",
-			state: { isInMeeting: false },
+			state: { isInMeeting: false, isMuteKnown: false, isVideoKnown: false, isSharingKnown: false },
 			permissions: {
 				canToggleMute: false,
 				canToggleVideo: false,
@@ -250,7 +250,12 @@ describe("TeamsChangedDebouncer", () => {
 		debounce.reset();
 		const transient = debounce.next(status({ "hangup-button": "Leave" }, { markers: ["hangup-button", "horizontalEnd"] }));
 		expect(transient.reason).toBeUndefined();
-		expect(transient.state.isInMeeting).toBe(false);
+		expect(transient.state).toMatchObject({
+			isInMeeting: false,
+			isMuteKnown: false,
+			isVideoKnown: false,
+			isSharingKnown: false,
+		});
 	});
 });
 
