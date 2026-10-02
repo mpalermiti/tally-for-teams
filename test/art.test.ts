@@ -36,9 +36,9 @@ describe("docs/art", () => {
 		expect(keys).toBeDefined();
 		expect(keys).toContain('viewBox="0 0 720 640"');
 		expect(keys).toContain(
-			'aria-label="The ten Tally keys: Mute, Camera, Raise hand, Share, Chat, React, People, Background blur, Meeting timer and Leave"',
+			'aria-label="The ten Tally keys: Mute, Camera, Raise hand, Share, Chat, React, People, Blur, Meeting timer and Leave"',
 		);
-		expect(keys).toContain(">Background blur<");
+		expect(keys).toContain(">Blur<");
 		expect(keys).toContain(">Meeting timer<");
 		expect(keys).toContain(">People<");
 		expect(keys).toContain(">24:17<");

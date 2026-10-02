@@ -90,10 +90,10 @@ describe("site", () => {
 
 	it("markets v1.1 without adding external dependencies", () => {
 		expect(html).toContain("Ten keys. One rule.");
-		expect(html).toContain("Push to talk on any key.");
+		expect(html).toContain("Push to talk.");
 		expect(html).toContain("One-click setup.");
-		expect(html).toContain("Never guesses.");
-		expect(html).toContain("Accept the bundled Tally profile");
+		expect(html).toContain("Tally doesn't guess.");
+		expect(html).toContain("Stream Deck offers a ready-made Tally profile");
 		expect(html.match(/<article>/g)?.length).toBe(6);
 	});
 
@@ -113,6 +113,7 @@ describe("site", () => {
 		expect(css).toMatch(/h1[^{]*\{[^}]*text-wrap:\s*balance;/s);
 		expect(css).toMatch(/\.lede\s*\{[^}]*text-wrap:\s*balance;/s);
 		expect(css).toMatch(/h2\s*\{[^}]*text-wrap:\s*balance;/s);
+		expect(css).toMatch(/\.grid h3\s*\{[^}]*text-wrap:\s*balance;/s);
 		expect(css).toMatch(/\.why p, \.keys p, \.privacy p, \.caption, \.setup-note\s*\{[^}]*text-wrap:\s*balance;/s);
 	});
 });

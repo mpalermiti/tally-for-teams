@@ -176,7 +176,7 @@ const KEY_STRIP_KEYS: [Slot, string][] = [
 	[{ kind: "chat" }, "Chat"],
 	[{ kind: "react", reaction: "like" }, "React"],
 	[{ kind: "people" }, "People"],
-	[{ kind: "blur" }, "Background blur"],
+	[{ kind: "blur" }, "Blur"],
 	[{ kind: "timer" }, "Meeting timer"],
 	[{ kind: "leave" }, "Leave"],
 ];
@@ -206,7 +206,7 @@ export function keysSvg(): string {
 	return svgDoc(
 		W,
 		H,
-		"The ten Tally keys: Mute, Camera, Raise hand, Share, Chat, React, People, Background blur, Meeting timer and Leave",
+		"The ten Tally keys: Mute, Camera, Raise hand, Share, Chat, React, People, Blur, Meeting timer and Leave",
 		`<defs><filter id="keyStripShadow" x="-12%" y="-8%" width="124%" height="126%"><feGaussianBlur stdDeviation="4"/></filter></defs>${body}`,
 	);
 }
@@ -234,7 +234,7 @@ export function keysCompactSvg(): string {
 	return svgDoc(
 		W,
 		H,
-		"The ten Tally keys: Mute, Camera, Raise hand, Share, Chat, React, People, Background blur, Meeting timer and Leave",
+		"The ten Tally keys: Mute, Camera, Raise hand, Share, Chat, React, People, Blur, Meeting timer and Leave",
 		`<defs><filter id="keyStripShadow" x="-12%" y="-8%" width="124%" height="126%"><feGaussianBlur stdDeviation="4"/></filter></defs>${body}`,
 	);
 }

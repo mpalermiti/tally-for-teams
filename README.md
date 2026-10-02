@@ -4,17 +4,17 @@ Live Microsoft Teams controls for Stream Deck on Mac.
 
 <p align="center"><img src="docs/art/hero.svg" width="760" alt="A Stream Deck with Tally keys mid-meeting: mic and camera lit with recording dots, timer at 24:17, Leave in red"></p>
 
-<p align="center"><b><a href="https://github.com/mpalermiti/tally-for-teams/releases/latest/download/Tally.streamDeckPlugin">Download Tally</a></b> · macOS 13+ · Stream Deck 7.1+ · the new Teams desktop app (full state in English Teams)</p>
+<p align="center"><b><a href="https://github.com/mpalermiti/tally-for-teams/releases/latest/download/Tally.streamDeckPlugin">Download Tally</a></b> · macOS 13+ · Stream Deck 7.1+ · the new Teams desktop app · full state in English Teams</p>
 
-**See it at a glance.** Keys light while your mic is live, your camera's on, your hand is up, you're sharing, or Teams is recording. If Tally cannot read a state, it stays neutral instead of guessing.
+**See it at a glance.** Keys light while your mic is live, your camera's on, your hand is up, or you're sharing. A red dot means the meeting is being recorded. If Tally can't read something, it doesn't guess.
 
 **Push to talk on any key.** Tap Mute to toggle. Hold it to talk while muted, or to cough while live.
 
 **Stays out of your way.** Works with Teams in the background and never pulls it to the front.
 
-**No accidental hang-ups.** Leave can require a hold.
+**No accidental hang-ups.** Turn on *Hold to leave* and a tap can't end your meeting.
 
-**One-click setup.** Stream Deck offers ready-made Tally profiles when you install.
+**One-click setup.** Stream Deck offers a ready-made Tally profile when you install.
 
 **Private by design.** Runs entirely on your Mac. No account, no cloud. It reads only Teams' meeting buttons.
 
