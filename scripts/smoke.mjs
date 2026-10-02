@@ -75,6 +75,7 @@ const TOOLBAR = {
 	"share-button": "Share",
 	"reaction-menu-button": "React",
 	"chat-button": "Chat",
+	"roster-button": "People",
 	"hangup-button": "Leave",
 };
 let buttons = { ...TOOLBAR };
@@ -119,9 +120,12 @@ try {
 	await until(() => fromPlugin.some((m) => m.event === "registerPlugin"), "plugin registers with Stream Deck");
 	await until(() => commands("watch").length === 1, "plugin starts the bridge and asks it to watch the toolbar");
 	check(commands("watch")[0].ids.includes("microphone-button"), "…including microphone-button");
+	check(commands("watch")[0].indicatorContainers?.includes("indicators"), "…including the indicators container");
 
 	event("willAppear", "mute", "MUTE1", keyPayload());
 	event("willAppear", "react", "REACT1", keyPayload({ reaction: "love" }));
+	event("willAppear", "timer", "TIMER1", keyPayload());
+	event("willAppear", "people", "PEOPLE1", keyPayload());
 	event("willAppear", "mute", "DIAL1", dialPayload);
 	await until(() => lastImage("MUTE1").includes("#3A3A42"), "keys draw offline before the bridge reports");
 	await until(() => feedback("DIAL1")?.label?.value === "Teams", "dial says Teams / Connecting");
@@ -137,6 +141,10 @@ try {
 	status();
 	await until(() => lastImage("MUTE1").includes("radialGradient"), "mute key lights up when the label says Mute mic (live)");
 	await until(() => feedback("DIAL1")?.label?.value === "Live", "dial says Live");
+	status({ indicators: [{ id: "call-recording-pill", role: "AXButton", label: "Recording" }] });
+	await until(() => lastImage("MUTE1").includes('data-badge="recording"'), "recording indicator adds the mic badge");
+	status({ indicators: [{ id: "call-duration-custom", role: "AXTimeGroup", label: "Elapsed time 01:05" }] });
+	await until(() => lastImage("TIMER1").includes(">1:05<"), "timer key shows a time from the duration indicator");
 
 	event("keyDown", "mute", "MUTE1", keyPayload());
 	await until(() => commands("press").some((c) => c.id === "microphone-button"), "pressing mute presses microphone-button");
@@ -199,6 +207,12 @@ try {
 	await until(() => commands("menu").length === 2, "…second reaction");
 	reply(commands("menu")[1], false, "No heart-button in reaction-menu-button menu; it offered: nothing");
 	await until(() => alerts("REACT1") === 1, "a missing menu item flashes an alert");
+
+	event("keyDown", "people", "PEOPLE1", keyPayload());
+	await until(() => commands("press").some((c) => c.id === "roster-button"), "People key presses roster-button");
+	reply(commands("press").filter((c) => c.id === "roster-button").at(-1));
+	await sleep(200);
+	check(alerts("PEOPLE1") === 0, "People key does not alert on success");
 
 	// Leave: a tap leaves by default.
 	const leaves = () => commands("press").filter((c) => c.id === "hangup-button").length;
