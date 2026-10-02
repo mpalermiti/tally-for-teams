@@ -58,6 +58,10 @@ const lastImage = (context) => {
 };
 const feedback = (context) => fromPlugin.filter((m) => m.event === "setFeedback" && m.context === context).at(-1)?.payload;
 const alerts = (context) => fromPlugin.filter((m) => m.event === "showAlert" && m.context === context).length;
+const globalSettingsRequests = () => fromPlugin.filter((m) => m.event === "getGlobalSettings");
+const sendGlobalSettings = (settings, request = globalSettingsRequests().at(-1)) =>
+	toPlugin({ event: "didReceiveGlobalSettings", id: request?.id, payload: { settings } });
+const profileSwitches = () => fromPlugin.filter((m) => m.event === "switchToProfile");
 
 // ── Fake Accessibility bridge ────────────────────────────────────
 const bridge = await listen();
@@ -119,6 +123,8 @@ const plugin = spawn(
 
 try {
 	await until(() => fromPlugin.some((m) => m.event === "registerPlugin"), "plugin registers with Stream Deck");
+	await until(() => globalSettingsRequests().length === 1, "plugin asks for global settings");
+	sendGlobalSettings({ autoSwitchProfile: false });
 	await until(() => commands("watch").length === 1, "plugin starts the bridge and asks it to watch the toolbar");
 	check(commands("watch")[0].ids.includes("microphone-button"), "…including microphone-button");
 	check(commands("watch")[0].indicatorContainers?.includes("indicators"), "…including the indicators container");
@@ -143,6 +149,8 @@ try {
 	status();
 	await until(() => lastImage("MUTE1").includes("radialGradient"), "mute key lights up when the label says Mute mic (live)");
 	await until(() => feedback("DIAL1")?.label?.value === "Live", "dial says Live");
+	await sleep(100);
+	check(profileSwitches().length === 0, "profile auto-switch stays off by default");
 	status({ indicators: [{ id: "call-recording-pill", role: "AXButton", label: "Recording" }] });
 	await until(() => lastImage("MUTE1").includes('data-badge="recording"'), "recording indicator adds the mic badge");
 	status({ indicators: [{ id: "call-duration-custom", role: "AXTimeGroup", label: "Elapsed time 01:05" }] });
@@ -318,6 +326,17 @@ try {
 	buttons = {};
 	status();
 	await until(() => feedback("DIAL1")?.detail?.value === "No meeting", "dial says No meeting once the toolbar is gone");
+	check(profileSwitches().length === 0, "disabled profile auto-switch never sends switchToProfile");
+
+	sendGlobalSettings({ autoSwitchProfile: true });
+	buttons = { ...TOOLBAR };
+	status();
+	await until(() => profileSwitches().length === 1, "profile auto-switch switches to Tally on the next meeting start");
+	check(profileSwitches().at(-1).payload.profile === "profiles/Tally (Stream Deck +)", "…using the bundled Stream Deck + profile name");
+	buttons = {};
+	status();
+	await until(() => profileSwitches().length === 2, "profile auto-switch returns to the previous profile on meeting end");
+	check(profileSwitches().at(-1).payload.profile === undefined, "…by omitting the profile name");
 
 	// With Hold to leave on, a tap never leaves while Teams is readable, even with the key dimmed.
 	const before = leaves();

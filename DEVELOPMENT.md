@@ -36,6 +36,7 @@ npm run smoke           # end-to-end: the built plugin against a fake Stream Dec
 npm run smoke:package   # package smoke: unzips the packed plugin and starts its real helper
 npm run watch           # rebuild + restart the plugin in Stream Deck on save
 npm run icons           # regenerate glyphs.ts plus action-list/key SVGs
+npm run profiles        # regenerate bundled Stream Deck profiles and manifest Profiles entries
 npm run sheet -- out.png   # render all keys in all states to one image
 ```
 
@@ -123,6 +124,33 @@ when the meeting or Teams/helper process ends, not on a transient toolbar miss. 
 unless a reliable status-time blur state is added. When Teams still looks like a meeting but the
 mic anchor is missing, Tally reports "Teams changed" and the plugin log lists the control ids it saw
 in that Teams window, capped for readability. It never logs labels or window titles.
+
+### Bundled profiles
+
+`npm run profiles` builds the one-click setup profiles from `scripts/profiles.ts` into
+`ai.michaelp.tally.sdPlugin/profiles/` and rewrites the manifest `Profiles` entries. The generated
+files are Stream Deck profile format 3.0 ZIPs: each `.streamDeckProfile` contains one
+`<UUID>.sdProfile/manifest.json` plus page manifests under `Profiles/<PAGE-ID>/manifest.json`.
+The root manifest keeps the Stream Deck-exported shape (`Version`, `Device.Model`, `Device.UUID`,
+`Pages`), and each page has a `Keypad` controller; Stream Deck + pages also include an `Encoder`
+controller. `profiles/summary.json` is generated from the same source so tests can verify the layout
+without unpacking the ZIPs.
+
+The shipped profiles are:
+
+- `profiles/Tally (Stream Deck)` — DeviceType `0`, 5×3 MK.2/standard Stream Deck layout.
+- `profiles/Tally (Stream Deck +)` — DeviceType `7`, 4×2 keys plus four dials, with Mute on dial 1.
+
+Stream Deck installs a bundled profile once and does not update an already-installed copy when the
+plugin later ships a different ZIP at the same manifest path. A layout change after release needs a
+new profile name/path (for example a visible revision suffix); otherwise existing users silently keep
+the old layout. Do not bump names casually: Stream Deck cannot remove old bundled profiles for users.
+
+Auto-switch is opt-in through the global `autoSwitchProfile` setting in every action's property
+inspector. When enabled, the plugin switches connected DeviceType 0 and 7 devices to the matching
+bundled profile on a no-meeting → in-meeting transition. On meeting end it calls
+`switchToProfile(deviceId)` without a profile name for devices it moved, which asks Stream Deck to
+return to the previous profile. If the setting is off, Tally never sends `switchToProfile`.
 
 ### Releasing
 

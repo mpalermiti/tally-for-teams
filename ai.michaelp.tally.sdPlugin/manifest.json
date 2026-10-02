@@ -33,6 +33,7 @@
 				"Keypad",
 				"Encoder"
 			],
+			"PropertyInspectorPath": "ui/settings.html",
 			"States": [
 				{
 					"Image": "imgs/actions/mute/key",
@@ -58,6 +59,7 @@
 			"Controllers": [
 				"Keypad"
 			],
+			"PropertyInspectorPath": "ui/settings.html",
 			"States": [
 				{
 					"Image": "imgs/actions/camera/key",
@@ -73,6 +75,7 @@
 			"Controllers": [
 				"Keypad"
 			],
+			"PropertyInspectorPath": "ui/settings.html",
 			"States": [
 				{
 					"Image": "imgs/actions/blur/key",
@@ -88,6 +91,7 @@
 			"Controllers": [
 				"Keypad"
 			],
+			"PropertyInspectorPath": "ui/settings.html",
 			"States": [
 				{
 					"Image": "imgs/actions/hand/key",
@@ -135,6 +139,7 @@
 			"Controllers": [
 				"Keypad"
 			],
+			"PropertyInspectorPath": "ui/settings.html",
 			"States": [
 				{
 					"Image": "imgs/actions/chat/key",
@@ -150,6 +155,7 @@
 			"Controllers": [
 				"Keypad"
 			],
+			"PropertyInspectorPath": "ui/settings.html",
 			"States": [
 				{
 					"Image": "imgs/actions/share/key",
@@ -165,6 +171,7 @@
 			"Controllers": [
 				"Keypad"
 			],
+			"PropertyInspectorPath": "ui/settings.html",
 			"States": [
 				{
 					"Image": "imgs/actions/timer/key",
@@ -180,12 +187,27 @@
 			"Controllers": [
 				"Keypad"
 			],
+			"PropertyInspectorPath": "ui/settings.html",
 			"States": [
 				{
 					"Image": "imgs/actions/people/key",
 					"ShowTitle": false
 				}
 			]
+		}
+	],
+	"Profiles": [
+		{
+			"Name": "profiles/Tally (Stream Deck)",
+			"DeviceType": 0,
+			"Readonly": false,
+			"DontAutoSwitchWhenInstalled": true
+		},
+		{
+			"Name": "profiles/Tally (Stream Deck +)",
+			"DeviceType": 7,
+			"Readonly": false,
+			"DontAutoSwitchWhenInstalled": true
 		}
 	]
 }

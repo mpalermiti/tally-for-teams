@@ -42,6 +42,15 @@ describe("manifest", () => {
 		expect(leave.PropertyInspectorPath).toBe("ui/leave.html");
 	});
 
+	it("gives every action a settings page with the global auto-switch opt-in", () => {
+		for (const action of manifest.Actions as { Name: string; PropertyInspectorPath?: string }[]) {
+			expect(action.PropertyInspectorPath, action.Name).toBeDefined();
+			const html = readFileSync(new URL(`../ai.michaelp.tally.sdPlugin/${action.PropertyInspectorPath}`, import.meta.url), "utf8");
+			expect(html, action.Name).toContain('setting="autoSwitchProfile"');
+			expect(html, action.Name).toContain("global");
+		}
+	});
+
 	it("resolves every manifest image path to a shipped SVG or PNG", () => {
 		const refs = [
 			manifest.Icon,
