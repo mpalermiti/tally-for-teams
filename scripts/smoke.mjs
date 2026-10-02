@@ -212,6 +212,12 @@ try {
 	check(commands("press").length === presses + 1, "turning right unmutes exactly once for a burst of ticks");
 	pressMic(true);
 
+	// Teams changed: meeting UI is present, but the mic anchor disappeared.
+	buttons = { "hangup-button": "Leave" };
+	status({ markers: ["hangup-button", "horizontalEnd"] });
+	await until(() => feedback("DIAL1")?.label?.value === "Teams changed", "dial says Teams changed when meeting markers remain but the mic button is gone");
+	await until(() => lastImage("MUTE1").includes(">?</text>"), "keys add a ? hint when Teams changed");
+
 	// Meeting ends: toolbar disappears.
 	buttons = {};
 	status();

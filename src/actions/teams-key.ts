@@ -88,9 +88,10 @@ export abstract class TeamsKey extends SingletonAction<KeySettings> {
 	async #draw(action: Action<KeySettings>): Promise<void> {
 		if (action.isKey()) {
 			const settings = this.#settings.get(action.id) ?? {};
+			const overlay = this.#overlays.get(action.id) ?? (this.teams.snapshot.reason === "teams-changed" ? { hint: "?" } : undefined);
 			const image = keyDataUrl(
 				visualFor(this.kind, this.teams.snapshot, { reaction: settings.reaction }),
-				this.#overlays.get(action.id),
+				overlay,
 			);
 			if (this.#drawn.get(action.id) === image) return;
 			this.#drawn.set(action.id, image);

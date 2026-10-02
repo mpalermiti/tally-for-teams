@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { BUTTON_IDS, commandFor, snapshotFrom, type BridgeStatus } from "../src/teams/selectors";
+import {
+	BUTTON_IDS,
+	DEFAULT_SELECTORS,
+	commandFor,
+	mergeSelectors,
+	snapshotFrom,
+	type BridgeStatus,
+} from "../src/teams/selectors";
 
 /** A status as the bridge reports it, using the labels seen on Teams 26267 for Mac. */
 function status(buttons: Record<string, string>, extra: Partial<BridgeStatus> = {}): BridgeStatus {
@@ -32,6 +39,23 @@ describe("snapshotFrom", () => {
 		expect(live.state).toMatchObject({ isMuted: false, isVideoOn: true });
 	});
 
+	it("marks mic, camera, and share state unknown when labels do not match their patterns", () => {
+		const unknown = snapshotFrom(
+			status({
+				...toolbar,
+				"microphone-button": "Stummschaltung aufheben",
+				"video-button": "Kamera einschalten",
+				"share-button": "Bildschirmfreigabe",
+			}),
+		);
+		expect(unknown.state).toMatchObject({
+			isInMeeting: true,
+			isMuteKnown: false,
+			isVideoKnown: false,
+			isSharingKnown: false,
+		});
+	});
+
 	it("allows exactly the controls that are on screen", () => {
 		const { permissions } = snapshotFrom(status(toolbar));
 		expect(permissions).toMatchObject({
@@ -59,11 +83,65 @@ describe("snapshotFrom", () => {
 		const s = snapshotFrom(status({}));
 		expect(s.online).toBe(true);
 		expect(s.state.isInMeeting).toBe(false);
+		expect(s.reason).toBeUndefined();
+	});
+
+	it("reports teams-changed when meeting UI markers are present but the mic anchor is gone", () => {
+		const s = snapshotFrom(status({ "hangup-button": "Leave" }, { markers: ["hangup-button", "horizontalEnd"] }));
+		expect(s).toMatchObject({
+			online: true,
+			reason: "teams-changed",
+			state: { isInMeeting: false },
+			permissions: {
+				canToggleMute: false,
+				canToggleVideo: false,
+				canLeave: false,
+				canReact: false,
+			},
+		});
 	});
 
 	it("goes offline with a reason when Teams can't be read", () => {
 		expect(snapshotFrom(status({}, { trusted: false }))).toMatchObject({ online: false, reason: "no-permission" });
 		expect(snapshotFrom(status({}, { running: false }))).toMatchObject({ online: false, reason: "teams-not-running" });
+	});
+});
+
+describe("mergeSelectors", () => {
+	it("deep-merges overrides over the defaults and compiles label patterns case-insensitively", () => {
+		const { selectors, problems } = mergeSelectors(DEFAULT_SELECTORS, {
+			buttonIds: { mute: "custom-mic-button" },
+			labelPatterns: { mute: { muted: "^silence" } },
+		});
+
+		expect(problems).toEqual([]);
+		expect(selectors.buttonIds.mute).toBe("custom-mic-button");
+		expect(selectors.buttonIds.camera).toBe(DEFAULT_SELECTORS.buttonIds.camera);
+		expect(selectors.labelPatterns.mute.muted.test("SILENCE microphone")).toBe(true);
+		expect(selectors.labelPatterns.mute.live.test("Mute mic")).toBe(true);
+	});
+
+	it("falls back to the default for invalid override fields and reports each problem", () => {
+		const { selectors, problems } = mergeSelectors(DEFAULT_SELECTORS, {
+			buttonIds: { mute: 42 },
+			labelPatterns: {
+				mute: { muted: "(" },
+				camera: { on: "\\bdisable\\b" },
+				chat: { unreadPattern: "(" },
+			},
+		});
+
+		expect(problems).toEqual(
+			expect.arrayContaining([
+				expect.stringContaining("buttonIds.mute"),
+				expect.stringContaining("labelPatterns.mute.muted"),
+				expect.stringContaining("labelPatterns.chat.unreadPattern"),
+			]),
+		);
+		expect(selectors.buttonIds.mute).toBe(DEFAULT_SELECTORS.buttonIds.mute);
+		expect(selectors.labelPatterns.mute.muted.test("Unmute mic")).toBe(true);
+		expect(selectors.labelPatterns.camera.on.test("DISABLE camera")).toBe(true);
+		expect(selectors.labelPatterns.chat.unreadPattern).toBeNull();
 	});
 });
 

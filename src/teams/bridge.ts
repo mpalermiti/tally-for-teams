@@ -11,7 +11,17 @@ import {
 	type Snapshot,
 	type TeamsAction,
 } from "./protocol";
-import { ANCHOR_ID, TEAMS_BUNDLE_IDS, WATCH_IDS, commandFor, snapshotFrom, type BridgeStatus } from "./selectors";
+import {
+	DEFAULT_ACTIVE_SELECTORS,
+	TEAMS_BUNDLE_IDS,
+	anchorId,
+	commandFor,
+	meetingMarkerIds,
+	snapshotFrom,
+	watchIds,
+	type BridgeStatus,
+	type Selectors,
+} from "./selectors";
 
 /** The parts of a child process the bridge uses; tests substitute a fake. */
 export interface BridgeProcess {
@@ -29,6 +39,7 @@ export interface TeamsBridgeOptions {
 	backoffMs?: number[];
 	requestTimeoutMs?: number;
 	log?: (message: string) => void;
+	selectors?: Selectors;
 }
 
 interface Pending {
@@ -46,7 +57,8 @@ const PERMISSION_HINT = "Allow Stream Deck in System Settings → Privacy & Secu
  * retired local API: a live `snapshot`, a `change` event, and `request()`.
  */
 export class TeamsBridge extends EventEmitter<{ change: [Snapshot] }> {
-	#options: Required<Omit<TeamsBridgeOptions, "log">> & Pick<TeamsBridgeOptions, "log">;
+	#options: Required<Omit<TeamsBridgeOptions, "log" | "selectors">> & Pick<TeamsBridgeOptions, "log">;
+	#selectors: Selectors;
 	#process: BridgeProcess | undefined;
 	#snapshot: Snapshot = STARTING;
 	#running = false;
@@ -57,11 +69,13 @@ export class TeamsBridge extends EventEmitter<{ change: [Snapshot] }> {
 
 	constructor(options: TeamsBridgeOptions) {
 		super();
+		const { selectors = DEFAULT_ACTIVE_SELECTORS, ...rest } = options;
+		this.#selectors = selectors;
 		this.#options = {
 			spawn: (command) => spawnProcess(command, [], { stdio: ["pipe", "pipe", "inherit"] }) as BridgeProcess,
 			backoffMs: [1_000, 2_000, 5_000, 10_000],
 			requestTimeoutMs: 4_000, // menus take up to ~2 s to open and search
-			...options,
+			...rest,
 		};
 	}
 
@@ -86,7 +100,7 @@ export class TeamsBridge extends EventEmitter<{ change: [Snapshot] }> {
 
 	/** Performs a key's action in Teams. Never rejects. */
 	async request(action: TeamsAction, parameters: ActionParameters = {}): Promise<RequestResult> {
-		const command = commandFor(action, parameters);
+		const command = commandFor(action, parameters, this.#selectors);
 		if ("unsupported" in command) return { ok: false, message: command.unsupported };
 
 		if (this.#snapshot.reason === "no-permission") {
@@ -123,7 +137,13 @@ export class TeamsBridge extends EventEmitter<{ change: [Snapshot] }> {
 		// A missing or unlaunchable binary surfaces as an error event on real processes.
 		(process as unknown as EventEmitter).on?.("error", (error: Error) => this.#options.log?.(`teams-bridge: ${error.message}`));
 
-		this.#write({ cmd: "watch", ids: WATCH_IDS, anchor: ANCHOR_ID, bundleIds: TEAMS_BUNDLE_IDS });
+		this.#write({
+			cmd: "watch",
+			ids: watchIds(this.#selectors),
+			anchor: anchorId(this.#selectors),
+			markers: meetingMarkerIds(this.#selectors),
+			bundleIds: TEAMS_BUNDLE_IDS,
+		});
 	}
 
 	#handle(line: string): void {
@@ -135,7 +155,7 @@ export class TeamsBridge extends EventEmitter<{ change: [Snapshot] }> {
 		}
 		if (message.type === "status") {
 			this.#attempt = 0;
-			this.#publish(snapshotFrom(message as BridgeStatus));
+			this.#publish(snapshotFrom(message as BridgeStatus, this.#selectors));
 		} else if (message.type === "result" && typeof message.req === "number") {
 			const pending = this.#pending.get(message.req);
 			if (!pending) return;

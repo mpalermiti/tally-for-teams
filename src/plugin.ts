@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 
 import { CameraKey, ChatKey, HandKey, LeaveKey, MuteKey, ReactKey, ShareKey } from "./actions/keys";
 import { TeamsBridge } from "./teams/bridge";
+import { loadSelectors } from "./teams/selectors-loader";
 
 streamDeck.logger.setLevel("info");
 
@@ -20,9 +21,13 @@ try {
 	streamDeck.logger.error(`Can't make teams-bridge executable: ${(error as Error).message}`);
 }
 
+const selectorLoad = loadSelectors();
+for (const problem of selectorLoad.problems) streamDeck.logger.warn(`selectors: ${problem}`);
+
 const teams = new TeamsBridge({
 	command: bridgePath,
 	log: (message) => streamDeck.logger.info(`bridge: ${message}`),
+	selectors: selectorLoad.selectors,
 });
 
 const keys = [
@@ -38,7 +43,10 @@ for (const key of keys) streamDeck.actions.registerAction(key);
 
 let lastReason: string | undefined = "starting";
 teams.on("change", (snapshot) => {
-	const reason = snapshot.online ? (snapshot.state.isInMeeting ? "in a meeting" : "connected") : snapshot.reason;
+	const reason =
+		snapshot.reason === "teams-changed" ? "teams-changed"
+		: snapshot.online ? (snapshot.state.isInMeeting ? "in a meeting" : "connected")
+		: snapshot.reason;
 	if (reason !== lastReason) {
 		lastReason = reason;
 		streamDeck.logger.info(`Teams: ${reason}`);

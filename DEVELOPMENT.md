@@ -86,6 +86,30 @@ src/actions/               one class per key; shared behaviour in teams-key.ts, 
 src/plugin.ts              wiring: start the helper, register keys, redraw on change
 ```
 
+### Fixing Tally when Teams changes
+
+Selector overrides live at `~/Library/Application Support/Tally for Teams/selectors.json`. The file
+is deep-merged over Tally's built-in Teams selectors at plugin start, so it survives plugin updates
+and can override only the changed pieces. Example:
+
+```json
+{
+  "buttonIds": {
+    "mute": "new-microphone-button"
+  },
+  "labelPatterns": {
+    "mute": {
+      "muted": "^unmute|^restore microphone"
+    }
+  }
+}
+```
+
+Label patterns are regex source strings compiled case-insensitively; invalid JSON or regex fields are
+reported in the plugin log and fall back to defaults. When Teams still looks like a meeting but the
+mic anchor is missing, Tally reports "Teams changed" and the plugin log lists the control ids it saw
+in that Teams window, capped for readability. It never logs labels or window titles.
+
 ### Releasing
 
 Releases go to [GitHub Releases](https://github.com/mpalermiti/tally-for-teams/releases), not npm (the package is private). Pushing a version tag makes CI build the plugin and attach `Tally.streamDeckPlugin`. `npm version` below only edits the version number.

@@ -42,8 +42,8 @@ export function visualFor(kind: KeyKind, snapshot: Snapshot, options: { reaction
 
 	// [glyph when on/neutral, glyph when off, available now?, currently on?]
 	const spec: Record<KeyKind, [GlyphName, GlyphName, boolean, boolean | "action" | "danger"]> = {
-		mute: ["mic", "mic-off", can.canToggleMute, !state.isMuted],
-		camera: ["video", "video-off", can.canToggleVideo, state.isVideoOn],
+		mute: ["mic", "mic-off", can.canToggleMute, state.isMuteKnown ? !state.isMuted : "action"],
+		camera: ["video", "video-off", can.canToggleVideo, state.isVideoKnown ? state.isVideoOn : "action"],
 		hand: ["hand", "hand", can.canToggleHand, state.isHandRaised],
 		leave: ["phone-off", "phone-off", can.canLeave, "danger"],
 		react: [REACTION_GLYPHS[options.reaction ?? "like"], REACTION_GLYPHS[options.reaction ?? "like"], can.canReact, "action"],
@@ -54,7 +54,12 @@ export function visualFor(kind: KeyKind, snapshot: Snapshot, options: { reaction
 			state.hasUnreadMessages || "action",
 		],
 		// While sharing, the key stops sharing, so it stays usable even if the tray isn't.
-		share: ["screen-share", "screen-share", can.canToggleShareTray || (state.isSharing && can.canStopSharing), state.isSharing || "action"],
+		share: [
+			"screen-share",
+			"screen-share",
+			can.canToggleShareTray || (state.isSharing && can.canStopSharing),
+			state.isSharingKnown ? state.isSharing || "action" : "action",
+		],
 	};
 
 	const [onGlyph, offGlyph, available, current] = spec[kind];
@@ -181,6 +186,7 @@ export interface DialFeedback {
 const OFFLINE_TEXT: Record<OfflineReason, [string, string]> = {
 	"no-permission": ["Allow", "Accessibility"],
 	"teams-not-running": ["Teams", "Not running"],
+	"teams-changed": ["Teams changed", "See README"],
 	starting: ["Teams", "Connecting"],
 };
 
@@ -190,8 +196,10 @@ export function muteDialFeedback(snapshot: Snapshot): DialFeedback {
 	const { state } = snapshot;
 
 	const [label, detail] =
-		visual.tone === "offline" ? OFFLINE_TEXT[snapshot.reason ?? "starting"]
+		snapshot.reason === "teams-changed" ? OFFLINE_TEXT["teams-changed"]
+		: visual.tone === "offline" ? OFFLINE_TEXT[snapshot.reason ?? "starting"]
 		: visual.tone === "idle" ? ["Mic", state.isInMeeting ? "Not available" : "No meeting"]
+		: !state.isMuteKnown ? ["Mic", "Ready"]
 		: state.isMuted ? ["Muted", "Hold to talk"]
 		: ["Live", "Hold to mute"];
 

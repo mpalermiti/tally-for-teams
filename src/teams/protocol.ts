@@ -24,7 +24,7 @@ export type UiTarget = "chat" | "sharing-tray";
 export type ActionParameters = { type: Reaction | UiTarget } | Record<string, never>;
 
 /** Why keys are dimmed while offline; shown in words on the Stream Deck+ dial. */
-export type OfflineReason = "no-permission" | "teams-not-running" | "starting";
+export type OfflineReason = "no-permission" | "teams-not-running" | "starting" | "teams-changed";
 
 /** What every key renders from. Replaced (never mutated) on each change. */
 export interface Snapshot {
@@ -42,10 +42,13 @@ export interface RequestResult {
 
 export interface MeetingState {
 	isMuted: boolean;
+	isMuteKnown: boolean;
 	isVideoOn: boolean;
+	isVideoKnown: boolean;
 	isHandRaised: boolean;
 	isInMeeting: boolean;
 	isSharing: boolean;
+	isSharingKnown: boolean;
 	hasUnreadMessages: boolean;
 }
 
@@ -63,10 +66,13 @@ export interface MeetingPermissions {
 
 export const EMPTY_STATE: MeetingState = {
 	isMuted: false,
+	isMuteKnown: true,
 	isVideoOn: false,
+	isVideoKnown: true,
 	isHandRaised: false,
 	isInMeeting: false,
 	isSharing: false,
+	isSharingKnown: true,
 	hasUnreadMessages: false,
 };
 

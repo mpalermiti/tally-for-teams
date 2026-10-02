@@ -6,12 +6,12 @@
 // (src/teams/selectors.ts) owns that, so Teams UI changes are fixed in TypeScript.
 //
 // Protocol: one JSON object per line.
-//   stdin  {"cmd":"watch","ids":["microphone-button",…],"anchor":"microphone-button","bundleIds":["com.microsoft.teams2"]}
+//   stdin  {"cmd":"watch","ids":["microphone-button",…],"anchor":"microphone-button","markers":["hangup-button",…],"bundleIds":["com.microsoft.teams2"]}
 //          {"cmd":"press","req":1,"id":"microphone-button"}
 //          {"cmd":"menu","req":2,"id":"reaction-menu-button","itemIds":["like-button"],"labels":["like"]}
 //                                                                                 open a menu, press the new item (id first, then label)
 //          {"cmd":"prompt"}                                                       show macOS's Accessibility permission prompt
-//   stdout {"type":"status","trusted":true,"running":true,"buttons":{"microphone-button":{"label":"Mute mic","enabled":true,"style":"fui-Button …"}}}
+//   stdout {"type":"status","trusted":true,"running":true,"markers":["hangup-button"],"buttons":{"microphone-button":{"label":"Mute mic","enabled":true,"style":"fui-Button …"}}}
 //          {"type":"result","req":1,"ok":true,"message":"pressed"}
 //          {"type":"log","message":"…"}
 //
@@ -83,17 +83,48 @@ func controls(in app: AXUIElement) -> [AXUIElement] {
 	windows(of: app).flatMap { controls(under: $0) }
 }
 
+struct WindowScan {
+	let found: [String: AXUIElement]
+	let markers: [String]
+	let controlIDs: [String]
+}
+
+func scanWindow(_ root: AXUIElement, wanted: Set<String>, markers: [String], maxNodes: Int = 40_000) -> WindowScan {
+	let markerSet = Set(markers)
+	var seenMarkers = Set<String>()
+	var found: [String: AXUIElement] = [:]
+	var controlIDs: [String] = []
+	var seenControlIDs = Set<String>()
+	var stack = [root]
+	var visited = 0
+	while let element = stack.popLast(), visited < maxNodes {
+		visited += 1
+		let id = domID(element)
+		if let id, markerSet.contains(id) { seenMarkers.insert(id) }
+		if let role = string(element, kAXRoleAttribute), controlRoles.contains(role), let id {
+			if wanted.contains(id), found[id] == nil { found[id] = element }
+			if seenControlIDs.insert(id).inserted { controlIDs.append(id) }
+		}
+		stack.append(contentsOf: children(element))
+	}
+	return WindowScan(found: found, markers: markers.filter { seenMarkers.contains($0) }, controlIDs: controlIDs)
+}
+
 // MARK: - State
 
 var watchIDs: [String] = []
 var anchorID = "microphone-button"
+var markerIDs: [String] = []
 var bundleIDs = ["com.microsoft.teams2"]
 
 var appPID: pid_t = 0
 var axApp: AXUIElement?
 var cache: [String: AXUIElement] = [:]
+var meetingMarkers: [String] = []
+var meetingControlIDs: [String] = []
 var lastDiscovery = Date.distantPast
 var lastStatus = ""
+var lastTeamsChangedLog = ""
 var promptedThisSession = false
 
 func teamsApp() -> NSRunningApplication? {
@@ -117,16 +148,22 @@ func discover(_ app: AXUIElement) {
 	lastDiscovery = Date()
 	let wanted = Set(watchIDs)
 	var best: [String: AXUIElement] = [:]
-	var bestScore = 0
+	var bestMarkers: [String] = []
+	var bestControlIDs: [String] = []
+	var bestScore = -1
 	for window in windows(of: app) {
-		var found: [String: AXUIElement] = [:]
-		for element in controls(under: window) {
-			if let id = domID(element), wanted.contains(id), found[id] == nil { found[id] = element }
+		let scan = scanWindow(window, wanted: wanted, markers: markerIDs)
+		let score = scan.found.count + (scan.found[anchorID] != nil ? 1000 : 0) + (scan.markers.isEmpty ? 0 : 500)
+		if score > bestScore {
+			best = scan.found
+			bestMarkers = scan.markers
+			bestControlIDs = scan.controlIDs
+			bestScore = score
 		}
-		let score = found.count + (found[anchorID] != nil ? 1000 : 0)
-		if score > bestScore { (best, bestScore) = (found, score) }
 	}
 	cache = best
+	meetingMarkers = bestMarkers
+	meetingControlIDs = bestControlIDs
 }
 
 /// The cached buttons that are still on screen.
@@ -141,10 +178,24 @@ func readButtons() -> [String: [String: Any]] {
 	return buttons
 }
 
+func maybeLogTeamsChanged(buttons: [String: [String: Any]], markers: [String]) {
+	if buttons[anchorID] != nil || markers.isEmpty {
+		lastTeamsChangedLog = ""
+		return
+	}
+	let ids = Array(meetingControlIDs.prefix(60))
+	let more = meetingControlIDs.count > ids.count ? " (+\(meetingControlIDs.count - ids.count) more)" : ""
+	let signature = markers.joined(separator: "|") + "::" + ids.joined(separator: "|") + "::\(meetingControlIDs.count)"
+	guard signature != lastTeamsChangedLog else { return }
+	lastTeamsChangedLog = signature
+	log("teams-changed markers: \(markers.joined(separator: " | ")); control ids: \(ids.isEmpty ? "none" : ids.joined(separator: " | "))\(more)")
+}
+
 func poll() {
 	guard !watchIDs.isEmpty else { return }
 	let trusted = AXIsProcessTrusted()
 	var buttons: [String: [String: Any]] = [:]
+	var markers: [String] = []
 	var running = false
 
 	if trusted, let app = teamsApp() {
@@ -156,6 +207,9 @@ func poll() {
 			enableTree(element)
 			axApp = element
 			cache = [:]
+			meetingMarkers = []
+			meetingControlIDs = []
+			lastTeamsChangedLog = ""
 			lastDiscovery = .distantPast
 		}
 		if let app = axApp {
@@ -168,15 +222,22 @@ func poll() {
 			if (stale && since > 2) || since > 10 {
 				discover(app)
 				buttons = readButtons()
+				markers = meetingMarkers
+			} else if !stale {
+				markers = meetingMarkers
 			}
+			maybeLogTeamsChanged(buttons: buttons, markers: markers)
 		}
 	} else if !trusted || teamsApp() == nil {
 		appPID = 0
 		axApp = nil
 		cache = [:]
+		meetingMarkers = []
+		meetingControlIDs = []
+		lastTeamsChangedLog = ""
 	}
 
-	let status: [String: Any] = ["type": "status", "trusted": trusted, "running": running, "buttons": buttons]
+	let status: [String: Any] = ["type": "status", "trusted": trusted, "running": running, "buttons": buttons, "markers": markers]
 	if let data = try? JSONSerialization.data(withJSONObject: status, options: [.sortedKeys]),
 		let line = String(data: data, encoding: .utf8), line != lastStatus
 	{
@@ -286,8 +347,12 @@ func handle(_ line: String) {
 	case "watch":
 		watchIDs = message["ids"] as? [String] ?? []
 		anchorID = message["anchor"] as? String ?? anchorID
+		markerIDs = message["markers"] as? [String] ?? []
 		bundleIDs = message["bundleIds"] as? [String] ?? bundleIDs
 		cache = [:]
+		meetingMarkers = []
+		meetingControlIDs = []
+		lastTeamsChangedLog = ""
 		lastDiscovery = .distantPast
 		lastStatus = ""
 		poll()

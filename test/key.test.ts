@@ -37,6 +37,21 @@ describe("visualFor", () => {
 		expect(visualFor("hand", inMeeting({ isHandRaised: false })).tone).toBe("off");
 	});
 
+	it("renders unknown mic, camera, and share state as neutral ready keys with plain glyphs", () => {
+		expect(visualFor("mute", inMeeting({ isMuteKnown: false } as Partial<MeetingState>))).toMatchObject({
+			tone: "ready",
+			glyph: "mic",
+		});
+		expect(visualFor("camera", inMeeting({ isVideoKnown: false } as Partial<MeetingState>))).toMatchObject({
+			tone: "ready",
+			glyph: "video",
+		});
+		expect(visualFor("share", inMeeting({ isSharingKnown: false } as Partial<MeetingState>))).toMatchObject({
+			tone: "ready",
+			glyph: "screen-share",
+		});
+	});
+
 	it("goes idle when Teams says the control isn't available in this meeting", () => {
 		expect(visualFor("mute", inMeeting({}, { canToggleMute: false })).tone).toBe("idle");
 		expect(visualFor("camera", inMeeting({}, { canToggleVideo: false })).tone).toBe("idle");
@@ -110,6 +125,7 @@ describe("muteDialFeedback", () => {
 		expect(text(muteDialFeedback({ ...offline, reason: "no-permission" }))).toEqual(["Allow", "Accessibility"]);
 		expect(text(muteDialFeedback({ ...offline, reason: "teams-not-running" }))).toEqual(["Teams", "Not running"]);
 		expect(text(muteDialFeedback({ ...offline, reason: "starting" }))).toEqual(["Teams", "Connecting"]);
+		expect(text(muteDialFeedback({ ...noMeeting, reason: "teams-changed" }))).toEqual(["Teams changed", "See README"]);
 		expect(text(muteDialFeedback(noMeeting))).toEqual(["Mic", "No meeting"]);
 		expect(text(muteDialFeedback(inMeeting({}, { canToggleMute: false })))).toEqual(["Mic", "Not available"]);
 	});
