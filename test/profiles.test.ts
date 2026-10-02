@@ -80,6 +80,18 @@ describe("bundled profiles", () => {
 		expect(streamDeckPlusProfile?.model).toBe("20GBD9901");
 	});
 
+	it("turns Hold to leave on for every bundled Leave action", () => {
+		for (const profile of PROFILES) {
+			const leaveActions = [...Object.values(profile.keys), ...Object.values(profile.dials ?? {})].filter(
+				(action) => action.uuid === "ai.michaelp.tally.leave",
+			);
+			expect(leaveActions.length, `${profile.displayName} Leave actions`).toBeGreaterThan(0);
+			for (const action of leaveActions) {
+				expect(action.settings, `${profile.displayName} ${action.name}`).toMatchObject({ holdToLeave: true });
+			}
+		}
+	});
+
 	it("lays out the 15-key profile with every requested Tally action", () => {
 		expect(summary.profiles["profiles/Tally (Stream Deck)"].keys).toEqual({
 			"0,0": { uuid: "ai.michaelp.tally.mute" },
@@ -95,7 +107,7 @@ describe("bundled profiles", () => {
 			"0,2": { uuid: "ai.michaelp.tally.people" },
 			"1,2": { uuid: "ai.michaelp.tally.blur" },
 			"2,2": { uuid: "ai.michaelp.tally.timer" },
-			"4,2": { uuid: "ai.michaelp.tally.leave" },
+			"4,2": { uuid: "ai.michaelp.tally.leave", settings: { holdToLeave: true } },
 		});
 	});
 
@@ -108,7 +120,7 @@ describe("bundled profiles", () => {
 			"0,1": { uuid: "ai.michaelp.tally.react", settings: { reaction: "like" } },
 			"1,1": { uuid: "ai.michaelp.tally.people" },
 			"2,1": { uuid: "ai.michaelp.tally.timer" },
-			"3,1": { uuid: "ai.michaelp.tally.leave" },
+			"3,1": { uuid: "ai.michaelp.tally.leave", settings: { holdToLeave: true } },
 		});
 		expect(summary.profiles["profiles/Tally (Stream Deck +)"].dials).toEqual({
 			"0,0": { uuid: "ai.michaelp.tally.mute" },

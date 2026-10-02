@@ -66,7 +66,7 @@ export const PROFILES: readonly DeviceProfile[] = [
 			"0,2": action("people", "People"),
 			"1,2": action("blur", "Background blur"),
 			"2,2": action("timer", "Meeting timer"),
-			"4,2": action("leave", "Leave"),
+			"4,2": action("leave", "Leave", { holdToLeave: true }),
 		},
 	},
 	{
@@ -88,7 +88,7 @@ export const PROFILES: readonly DeviceProfile[] = [
 			"0,1": action("react", "React: Like", { reaction: "like" }),
 			"1,1": action("people", "People"),
 			"2,1": action("timer", "Meeting timer"),
-			"3,1": action("leave", "Leave"),
+			"3,1": action("leave", "Leave", { holdToLeave: true }),
 		},
 		dials: {
 			"0,0": action("mute", "Mute"),

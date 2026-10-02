@@ -12,7 +12,7 @@ Live Microsoft Teams controls for Stream Deck on Mac.
 
 **Stays out of your way.** Works with Teams in the background and never pulls it to the front.
 
-**No accidental hang-ups.** Turn on *Hold to leave* and a tap can't end your meeting.
+**No accidental hang-ups.** Leave can need a hold, so a stray tap can't end your meeting. It's on in the bundled profiles.
 
 **One-click setup.** Stream Deck offers a ready-made Tally profile for Stream Deck and Stream Deck + when you install.
 
@@ -44,7 +44,7 @@ On a **Stream Deck+**, put Mute on a dial: tap to toggle, hold to talk, turn rig
 ## Set up
 
 1. [Download Tally](https://github.com/mpalermiti/tally-for-teams/releases/latest/download/Tally.streamDeckPlugin) and double-click it.
-2. Accept the bundled **Tally (Stream Deck)** or **Tally (Stream Deck +)** profile, or drag the keys you want from **Tally for Teams**. For Leave, consider turning on *Hold to leave* in its settings. (In a Multi Action, Leave still acts at once.)
+2. Accept the bundled **Tally (Stream Deck)** or **Tally (Stream Deck +)** profile, or drag the keys you want from **Tally for Teams**. Bundled Leave keys already use *Hold to leave*; keys you drag in yourself can turn it on in settings. (In a Multi Action, Leave still acts at once.)
 3. Press any Tally key. macOS asks to let **Stream Deck** control your computer: turn it on in System Settings → Privacy & Security → Accessibility. (Teams no longer offers a control API, so Tally works the way a screen reader does.) Until it's on, keys stay dark and a Stream Deck+ dial says *Allow / Accessibility*.
 
 Optional: on Stream Deck or Stream Deck +, in any Tally key's settings, turn on *Switch to the Tally profile during meetings*. Tally switches to the bundled profile when a meeting starts and switches back after it ends.
