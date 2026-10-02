@@ -86,6 +86,15 @@ describe("visualFor", () => {
 		expect(visualFor("people", inMeeting({}, { canTogglePeople: false })).tone).toBe("idle");
 	});
 
+	it("shows Background blur as a neutral action unless a reliable blur state is known", () => {
+		expect(visualFor("blur", inMeeting())).toMatchObject({ tone: "ready", glyph: "blur" });
+		expect(visualFor("blur", inMeeting({ isBackgroundBlurKnown: true, isBackgroundBlurred: true } as Partial<MeetingState>))).toMatchObject({
+			tone: "on",
+			glyph: "blur",
+		});
+		expect(visualFor("blur", inMeeting({}, { canToggleBlur: false }))).toMatchObject({ tone: "idle", glyph: "blur" });
+	});
+
 	it("flags recording on the mic and camera keys only", () => {
 		const recording = inMeeting({ isRecording: true });
 		expect(visualFor("mute", recording).recording).toBe(true);

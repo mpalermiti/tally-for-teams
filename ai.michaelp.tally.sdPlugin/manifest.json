@@ -66,6 +66,21 @@
 			]
 		},
 		{
+			"Name": "Background blur",
+			"UUID": "ai.michaelp.tally.blur",
+			"Icon": "imgs/actions/blur/icon",
+			"Tooltip": "Blur or unblur your background.",
+			"Controllers": [
+				"Keypad"
+			],
+			"States": [
+				{
+					"Image": "imgs/actions/blur/key",
+					"ShowTitle": false
+				}
+			]
+		},
+		{
 			"Name": "Raise hand",
 			"UUID": "ai.michaelp.tally.hand",
 			"Icon": "imgs/actions/hand/icon",

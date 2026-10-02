@@ -41,6 +41,13 @@ describe("snapshotFrom", () => {
 		expect(DEFAULT_SELECTORS.indicatorContainerIds).toEqual(["indicators"]);
 	});
 
+	it("uses Teams' video options menu for Background blur by default", () => {
+		expect(DEFAULT_SELECTORS.buttonIds.blur).toBe("video-button-configure");
+		expect(DEFAULT_SELECTORS.blur.on.labels).toEqual(["blur"]);
+		expect(DEFAULT_SELECTORS.blur.on.excludeLabels).toEqual(["no background effect", "none"]);
+		expect(DEFAULT_SELECTORS.blur.off.labels).toEqual(["no background effect", "none"]);
+	});
+
 	it("reads mute and camera state from the button labels", () => {
 		const muted = snapshotFrom(status(toolbar));
 		expect(muted.online).toBe(true);
@@ -355,6 +362,23 @@ describe("commandFor", () => {
 		expect(commandFor("toggle-ui", { type: "chat" })).toEqual({ cmd: "press", id: BUTTON_IDS.chat });
 		expect(commandFor("toggle-ui", { type: "sharing-tray" })).toEqual({ cmd: "press", id: BUTTON_IDS.share });
 		expect(commandFor("toggle-people", {})).toEqual({ cmd: "press", id: "roster-button" });
+	});
+
+	it("opens video options to turn Background blur on or off by item label", () => {
+		expect(commandFor("set-background-blur", { type: "blur-on" })).toEqual({
+			cmd: "menu",
+			id: "video-button-configure",
+			itemIds: [],
+			labels: ["blur"],
+			excludeLabels: ["no background effect", "none"],
+		});
+		expect(commandFor("set-background-blur", { type: "blur-off" })).toEqual({
+			cmd: "menu",
+			id: "video-button-configure",
+			itemIds: [],
+			labels: ["no background effect", "none"],
+			excludeLabels: [],
+		});
 	});
 
 	it("sends reactions and raises hands by pressing React-menu items by id", () => {

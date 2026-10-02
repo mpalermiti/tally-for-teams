@@ -111,7 +111,13 @@ the configured indicator containers (default `#indicators`) and matches `recordi
 case-insensitive regex. `recording.ids` are only a fallback: an id match still needs a non-negative
 label, so labels such as "Recording stopped" or "Off" never light the recording badge. The meeting timer
 reads the `call-duration-custom` indicator label and parses the first `MM:SS` or `H:MM:SS` duration.
-The People key presses `buttonIds.people` (default `roster-button`). When Teams still looks like a meeting but the
+The People key presses `buttonIds.people` (default `roster-button`). Background blur presses the
+`buttonIds.blur` menu host (default `video-button-configure`) and then a configured `blur.on` or
+`blur.off` menu item. The built-in item-label defaults use `blur` for on and `no background effect`
+/ `none` for off; the item names match Bad Duck's Teams Control selectors for Teams' video options
+menu. Because Teams does not expose a verified status-time blur state on Mac, Tally uses the last
+confirmed blur press only to choose the next menu item and keeps the key neutral unless a reliable
+state signal is added. When Teams still looks like a meeting but the
 mic anchor is missing, Tally reports "Teams changed" and the plugin log lists the control ids it saw
 in that Teams window, capped for readability. It never logs labels or window titles.
 

@@ -8,7 +8,7 @@
 // Protocol: one JSON object per line.
 //   stdin  {"cmd":"watch","ids":["microphone-button",…],"anchor":"microphone-button","markers":["hangup-button",…],"indicatorContainers":["indicators"],"bundleIds":["com.microsoft.teams2"]}
 //          {"cmd":"press","req":1,"id":"microphone-button"}
-//          {"cmd":"menu","req":2,"id":"reaction-menu-button","itemIds":["like-button"],"labels":["like"]}
+//          {"cmd":"menu","req":2,"id":"reaction-menu-button","itemIds":["like-button"],"labels":["like"],"excludeLabels":["none"]}
 //                                                                                 open a menu, press the new item (id first, then label)
 //          {"cmd":"prompt"}                                                       show macOS's Accessibility permission prompt
 //   stdout {"type":"status","trusted":true,"running":true,"indicators":[{"id":"call-duration-custom","role":"AXTimeGroup","label":"Elapsed time 00:34"}],"markers":["hangup-button"],"markerControlIds":["hangup-button"],"buttons":{"microphone-button":{"label":"Mute mic","enabled":true,"style":"fui-Button …"}}}
@@ -41,6 +41,12 @@ func value(_ element: AXUIElement, _ attribute: String) -> AnyObject? {
 }
 func string(_ element: AXUIElement, _ attribute: String) -> String? {
 	(value(element, attribute) as? String).flatMap { $0.isEmpty ? nil : $0 }
+}
+func bool(_ element: AXUIElement, _ attribute: String) -> Bool? {
+	guard let raw = value(element, attribute) else { return nil }
+	if let number = raw as? NSNumber { return number.boolValue }
+	if let bool = raw as? Bool { return bool }
+	return nil
 }
 func children(_ element: AXUIElement) -> [AXUIElement] {
 	(value(element, kAXChildrenAttribute) as? [AXUIElement]) ?? []
@@ -337,8 +343,10 @@ func poll() {
 
 // MARK: - Commands
 
-func result(_ req: Any?, _ ok: Bool, _ message: String) {
-	send(["type": "result", "req": req ?? NSNull(), "ok": ok, "message": message])
+func result(_ req: Any?, _ ok: Bool, _ message: String, extra: [String: Any] = [:]) {
+	var payload: [String: Any] = ["type": "result", "req": req ?? NSNull(), "ok": ok, "message": message]
+	for (key, value) in extra { payload[key] = value }
+	send(payload)
 }
 
 func element(for id: String) -> AXUIElement? {
@@ -361,7 +369,7 @@ func press(_ id: String, req: Any?) {
 /// Opens a menu (e.g. React) and presses the item that appeared whose web id is in `itemIds`,
 /// falling back to one whose label contains a word from `labels`. Controls that existed before
 /// opening are ignored, so a chat message's "Like" can never match.
-func menu(_ id: String, itemIds: [String], labels: [String], req: Any?) {
+func menu(_ id: String, itemIds: [String], labels: [String], excludeLabels: [String], req: Any?) {
 	guard AXIsProcessTrusted() else { return result(req, false, "Accessibility permission is off") }
 	guard let app = axApp else { return result(req, false, "Teams isn't running") }
 	guard let button = element(for: id) else { return result(req, false, "No \(id) on screen") }
@@ -371,6 +379,12 @@ func menu(_ id: String, itemIds: [String], labels: [String], req: Any?) {
 	guard opened == .success else { return result(req, false, "Couldn't open \(id): AXError \(opened.rawValue)") }
 
 	let wantedLabels = labels.map { $0.lowercased() }
+	let unwantedLabels = excludeLabels.map { $0.lowercased() }
+	func labelMatches(_ el: AXUIElement) -> Bool {
+		guard let text = label(el)?.lowercased() else { return false }
+		guard wantedLabels.contains(where: { text.contains($0) }) else { return false }
+		return !unwantedLabels.contains(where: { text.contains($0) })
+	}
 	var fresh: [AXUIElement] = []
 	var item: AXUIElement?
 	let deadline = Date().addingTimeInterval(1.5)
@@ -378,10 +392,7 @@ func menu(_ id: String, itemIds: [String], labels: [String], req: Any?) {
 		Thread.sleep(forTimeInterval: 0.1)
 		fresh = controls(in: app).filter { candidate in !before.contains { CFEqual($0, candidate) } }
 		item = fresh.first { domID($0).map(itemIds.contains) ?? false }
-			?? fresh.first { el in
-				guard let text = label(el)?.lowercased() else { return false }
-				return wantedLabels.contains { text.contains($0) }
-			}
+			?? fresh.first(where: labelMatches)
 	}
 
 	guard let item else {
@@ -403,9 +414,11 @@ func menu(_ id: String, itemIds: [String], labels: [String], req: Any?) {
 	}
 	let error = AXUIElementPerformAction(item, kAXPressAction as CFString)
 	let pressedLabel = label(item) ?? domID(item) ?? "item"
+	var extra: [String: Any] = [:]
+	if let selected = bool(item, "AXSelected") ?? bool(item, kAXValueAttribute) { extra["selected"] = selected }
 	Thread.sleep(forTimeInterval: 0.3)
 	closeMenu(app, items: fresh, button: button)
-	result(req, error == .success, error == .success ? "pressed \(pressedLabel)" : "AXError \(error.rawValue)")
+	result(req, error == .success, error == .success ? "pressed \(pressedLabel)" : "AXError \(error.rawValue)", extra: extra)
 	DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: poll)
 }
 
@@ -454,6 +467,7 @@ func handle(_ line: String) {
 			message["id"] as? String ?? "",
 			itemIds: message["itemIds"] as? [String] ?? [],
 			labels: message["labels"] as? [String] ?? [],
+			excludeLabels: message["excludeLabels"] as? [String] ?? [],
 			req: message["req"]
 		)
 	case "prompt":

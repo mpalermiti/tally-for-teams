@@ -14,6 +14,7 @@ import {
 
 import { muteDialFeedback, timerDataUrl, type Tone } from "../render/key";
 import type { RequestResult, Snapshot } from "../teams/protocol";
+import { BackgroundBlurToggle } from "./blur";
 import { HOLD_TO_LEAVE_MS, HoldToConfirm, HoldToggle, RotateToggle, shouldHoldMuteKey, shouldHoldToLeave } from "./gestures";
 import { TeamsKey, type KeySettings } from "./teams-key";
 import { KeyedMeetingTimers } from "./timer";
@@ -151,6 +152,19 @@ export class MuteKey extends TeamsKey {
 export class CameraKey extends TeamsKey {
 	readonly kind = "camera";
 	protected press = () => this.teams.request("toggle-video");
+}
+
+@action({ UUID: "ai.michaelp.tally.blur" })
+export class BlurKey extends TeamsKey {
+	readonly kind = "blur";
+	#toggle = new BackgroundBlurToggle();
+
+	protected press = async () => {
+		const direction = this.#toggle.next();
+		const result = await this.teams.request("set-background-blur", { type: direction === "on" ? "blur-on" : "blur-off" });
+		this.#toggle.record(direction, result.ok);
+		return result;
+	};
 }
 
 @action({ UUID: "ai.michaelp.tally.hand" })

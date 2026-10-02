@@ -23,11 +23,17 @@ import {
 
 export const TEAMS_BUNDLE_IDS = ["com.microsoft.teams2"];
 
-type ButtonKey = "mute" | "camera" | "share" | "react" | "chat" | "leave" | "people";
+type ButtonKey = "mute" | "camera" | "blur" | "share" | "react" | "chat" | "leave" | "people";
 
 export interface MenuItemSelector {
 	id: string;
 	labels: readonly string[];
+}
+
+export interface MenuTargetSelector {
+	ids: readonly string[];
+	labels: readonly string[];
+	excludeLabels: readonly string[];
 }
 
 export interface SelectorConfig {
@@ -35,6 +41,10 @@ export interface SelectorConfig {
 	plainIds: readonly string[];
 	reactionItems: Record<Reaction, MenuItemSelector>;
 	handItem: MenuItemSelector;
+	blur: {
+		on: MenuTargetSelector;
+		off: MenuTargetSelector;
+	};
 	meetingMarkerIds: readonly string[];
 	indicatorContainerIds: readonly string[];
 	recording: {
@@ -72,6 +82,7 @@ export const DEFAULT_SELECTORS = {
 	buttonIds: {
 		mute: "microphone-button",
 		camera: "video-button",
+		blur: "video-button-configure",
 		share: "share-button",
 		react: "reaction-menu-button",
 		chat: "chat-button",
@@ -87,6 +98,10 @@ export const DEFAULT_SELECTORS = {
 		wow: { id: "surprised-button", labels: ["surprised", "wow"] },
 	},
 	handItem: { id: "raisehands-button", labels: ["raise", "lower"] },
+	blur: {
+		on: { ids: [], labels: ["blur"], excludeLabels: ["no background effect", "none"] },
+		off: { ids: [], labels: ["no background effect", "none"], excludeLabels: [] },
+	},
 	meetingMarkerIds: ["horizontalMiddleEnd", "horizontalEnd"],
 	indicatorContainerIds: ["indicators"],
 	recording: {
@@ -138,7 +153,7 @@ export interface BridgeIndicator {
 
 export type BridgeCommand =
 	| { cmd: "press"; id: string }
-	| { cmd: "menu"; id: string; itemIds: string[]; labels: readonly string[] };
+	| { cmd: "menu"; id: string; itemIds: string[]; labels: readonly string[]; excludeLabels?: readonly string[] };
 
 export function mergeSelectors(defaults: SelectorConfig, override?: unknown): MergeSelectorsResult {
 	const problems: string[] = [];
@@ -206,6 +221,7 @@ export function snapshotFrom(status: BridgeStatus, selectors: Selectors = DEFAUL
 			...NO_PERMISSIONS,
 			canToggleMute: usable(selectors.buttonIds.mute),
 			canToggleVideo: usable(selectors.buttonIds.camera),
+			canToggleBlur: usable(selectors.buttonIds.blur),
 			canLeave: usable(selectors.buttonIds.leave),
 			canReact: usable(selectors.buttonIds.react),
 			canToggleHand: usable(selectors.buttonIds.react) || usable(selectors.handItem.id),
@@ -306,6 +322,16 @@ export function commandFor(
 			return { cmd: "press", id: selectors.buttonIds.mute };
 		case "toggle-video":
 			return { cmd: "press", id: selectors.buttonIds.camera };
+		case "set-background-blur": {
+			const target = type === "blur-off" ? selectors.blur.off : selectors.blur.on;
+			return {
+				cmd: "menu",
+				id: selectors.buttonIds.blur,
+				itemIds: [...target.ids],
+				labels: target.labels,
+				excludeLabels: target.excludeLabels,
+			};
+		}
 		case "leave-call":
 			return { cmd: "press", id: selectors.buttonIds.leave };
 		case "toggle-ui":
@@ -372,6 +398,7 @@ function compileSelectors(config: SelectorConfig, defaults: SelectorConfig, prob
 		plainIds: config.plainIds,
 		reactionItems: config.reactionItems,
 		handItem: config.handItem,
+		blur: config.blur,
 		meetingMarkerIds: config.meetingMarkerIds,
 		indicatorContainerIds: config.indicatorContainerIds,
 		recording: {

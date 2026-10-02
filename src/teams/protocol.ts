@@ -8,6 +8,7 @@
 export type TeamsAction =
 	| "toggle-mute"
 	| "toggle-video"
+	| "set-background-blur"
 	| "toggle-hand"
 	| "leave-call"
 	| "send-reaction"
@@ -21,8 +22,9 @@ export const REACTIONS: readonly Reaction[] = ["like", "love", "applause", "laug
 
 /** `toggle-ui` targets. */
 export type UiTarget = "chat" | "sharing-tray";
+export type BlurTarget = "blur-on" | "blur-off";
 
-export type ActionParameters = { type: Reaction | UiTarget } | Record<string, never>;
+export type ActionParameters = { type: Reaction | UiTarget | BlurTarget } | Record<string, never>;
 
 /** Why keys are dimmed while offline; shown in words on the Stream Deck+ dial. */
 export type OfflineReason = "no-permission" | "teams-not-running" | "starting" | "teams-changed";
@@ -39,6 +41,8 @@ export interface Snapshot {
 export interface RequestResult {
 	ok: boolean;
 	message: string;
+	/** Optional AXSelected/AXValue state reported by a menu item, when Teams exposes one. */
+	selected?: boolean;
 }
 
 export interface MeetingState {
@@ -46,6 +50,8 @@ export interface MeetingState {
 	isMuteKnown: boolean;
 	isVideoOn: boolean;
 	isVideoKnown: boolean;
+	isBackgroundBlurred: boolean;
+	isBackgroundBlurKnown: boolean;
 	isHandRaised: boolean;
 	isInMeeting: boolean;
 	isSharing: boolean;
@@ -59,6 +65,7 @@ export interface MeetingState {
 export interface MeetingPermissions {
 	canToggleMute: boolean;
 	canToggleVideo: boolean;
+	canToggleBlur: boolean;
 	canToggleHand: boolean;
 	canLeave: boolean;
 	canReact: boolean;
@@ -74,6 +81,8 @@ export const EMPTY_STATE: MeetingState = {
 	isMuteKnown: true,
 	isVideoOn: false,
 	isVideoKnown: true,
+	isBackgroundBlurred: false,
+	isBackgroundBlurKnown: false,
 	isHandRaised: false,
 	isInMeeting: false,
 	isSharing: false,
@@ -85,6 +94,7 @@ export const EMPTY_STATE: MeetingState = {
 export const NO_PERMISSIONS: MeetingPermissions = {
 	canToggleMute: false,
 	canToggleVideo: false,
+	canToggleBlur: false,
 	canToggleHand: false,
 	canLeave: false,
 	canReact: false,

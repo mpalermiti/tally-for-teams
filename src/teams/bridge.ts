@@ -156,7 +156,7 @@ export class TeamsBridge extends EventEmitter<{ change: [Snapshot] }> {
 	}
 
 	#handle(line: string): void {
-		let message: { type?: string; req?: number; ok?: boolean; message?: string } & Partial<BridgeStatus>;
+		let message: { type?: string; req?: number; ok?: boolean; message?: string; selected?: boolean } & Partial<BridgeStatus>;
 		try {
 			message = JSON.parse(line);
 		} catch {
@@ -175,7 +175,11 @@ export class TeamsBridge extends EventEmitter<{ change: [Snapshot] }> {
 			if (!pending) return;
 			this.#pending.delete(message.req);
 			clearTimeout(pending.timer);
-			pending.resolve({ ok: message.ok === true, message: message.message ?? "" });
+			pending.resolve({
+				ok: message.ok === true,
+				message: message.message ?? "",
+				...(typeof message.selected === "boolean" ? { selected: message.selected } : {}),
+			});
 		} else if (message.type === "log" && message.message) {
 			this.#options.log?.(message.message);
 		}

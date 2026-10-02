@@ -134,6 +134,26 @@ describe("TeamsBridge", () => {
 		await expect(pending).resolves.toEqual({ ok: false, message: "No surprised/wow in menu" });
 	});
 
+	it("sends Background blur requests through the video options menu", async () => {
+		start();
+		latest().status({ [BUTTON_IDS.mute]: "Mute mic", "video-button-configure": "Open video options" });
+		await until(() => bridge.snapshot.online);
+
+		const pending = bridge.request("set-background-blur", { type: "blur-on" });
+		await until(() => latest().written.some((m) => m.cmd === "menu"));
+		const sent = latest().written.find((m) => m.cmd === "menu");
+		expect(sent).toMatchObject({
+			cmd: "menu",
+			id: "video-button-configure",
+			itemIds: [],
+			labels: ["blur"],
+			excludeLabels: ["no background effect", "none"],
+			req: expect.any(Number),
+		});
+		latest().say({ type: "result", req: sent.req, ok: true, message: "pressed Standard blur" });
+		await expect(pending).resolves.toEqual({ ok: true, message: "pressed Standard blur" });
+	});
+
 	it("answers unsupported actions without bothering the helper", async () => {
 		start();
 		latest().status({ [BUTTON_IDS.mute]: "Mute mic" });

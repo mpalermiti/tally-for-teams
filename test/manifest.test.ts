@@ -26,8 +26,15 @@ describe("manifest", () => {
 		expect([...uuids].sort()).toEqual(KEY_KINDS.map((kind) => `ai.michaelp.tally.${kind}`).sort());
 	});
 
-	it("doesn't offer keys that can't work yet", () => {
-		expect(uuids).not.toContain("ai.michaelp.tally.blur");
+	it("offers Background blur as a neutral menu-backed action", () => {
+		const blur = manifest.Actions.find((a: { UUID: string }) => a.UUID === "ai.michaelp.tally.blur");
+		expect(blur).toMatchObject({
+			Name: "Background blur",
+			Icon: "imgs/actions/blur/icon",
+			Tooltip: "Blur or unblur your background.",
+			Controllers: ["Keypad"],
+			States: [{ Image: "imgs/actions/blur/key", ShowTitle: false }],
+		});
 	});
 
 	it("gives Leave a settings page", () => {

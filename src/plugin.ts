@@ -3,7 +3,7 @@ import { chmodSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { CameraKey, ChatKey, HandKey, LeaveKey, MuteKey, PeopleKey, ReactKey, ShareKey, TimerKey } from "./actions/keys";
+import { BlurKey, CameraKey, ChatKey, HandKey, LeaveKey, MuteKey, PeopleKey, ReactKey, ShareKey, TimerKey } from "./actions/keys";
 import { TeamsBridge } from "./teams/bridge";
 import { loadSelectors } from "./teams/selectors-loader";
 
@@ -33,6 +33,7 @@ const teams = new TeamsBridge({
 const keys = [
 	new MuteKey(teams),
 	new CameraKey(teams),
+	new BlurKey(teams),
 	new HandKey(teams),
 	new LeaveKey(teams),
 	new ReactKey(teams),

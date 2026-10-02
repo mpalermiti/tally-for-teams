@@ -123,6 +123,7 @@ try {
 	check(commands("watch")[0].indicatorContainers?.includes("indicators"), "…including the indicators container");
 
 	event("willAppear", "mute", "MUTE1", keyPayload());
+	event("willAppear", "blur", "BLUR1", keyPayload());
 	event("willAppear", "react", "REACT1", keyPayload({ reaction: "love" }));
 	event("willAppear", "timer", "TIMER1", keyPayload());
 	event("willAppear", "people", "PEOPLE1", keyPayload());
@@ -145,6 +146,25 @@ try {
 	await until(() => lastImage("MUTE1").includes('data-badge="recording"'), "recording indicator adds the mic badge");
 	status({ indicators: [{ id: "call-duration-custom", role: "AXTimeGroup", label: "Elapsed time 01:05" }] });
 	await until(() => lastImage("TIMER1").includes(">1:05<"), "timer key shows a time from the duration indicator");
+
+	let blurMenus = commands("menu").filter((c) => c.id === "video-button-configure").length;
+	event("keyDown", "blur", "BLUR1", keyPayload());
+	await until(() => commands("menu").filter((c) => c.id === "video-button-configure").length === blurMenus + 1, "Background blur opens video options");
+	let blurMenu = commands("menu").filter((c) => c.id === "video-button-configure").at(-1);
+	check(
+		blurMenu.labels.includes("blur") && blurMenu.excludeLabels.includes("no background effect"),
+		"…looking for the blur item without matching no-effect",
+	);
+	reply(blurMenu, true, "pressed Standard blur");
+	await sleep(200);
+	check(alerts("BLUR1") === 0, "Background blur does not alert on success");
+
+	blurMenus = commands("menu").filter((c) => c.id === "video-button-configure").length;
+	event("keyDown", "blur", "BLUR1", keyPayload());
+	await until(() => commands("menu").filter((c) => c.id === "video-button-configure").length === blurMenus + 1, "Background blur alternates to no effect after a confirmed on press");
+	blurMenu = commands("menu").filter((c) => c.id === "video-button-configure").at(-1);
+	check(blurMenu.labels.includes("no background effect"), "…looking for the no-background-effect item");
+	reply(blurMenu, true, "pressed No background effect");
 
 	event("keyDown", "mute", "MUTE1", keyPayload());
 	await until(() => commands("press").some((c) => c.id === "microphone-button"), "pressing mute presses microphone-button");

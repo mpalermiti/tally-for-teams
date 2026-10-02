@@ -1,6 +1,6 @@
 /**
  * Regenerates every image the plugin ships:
- *   1. src/render/glyphs.ts — Lucide glyph markup (plus one custom glyph) for runtime key rendering
+ *   1. src/render/glyphs.ts — Lucide glyph markup (plus two custom glyphs) for runtime key rendering
  *   2. SVGs in the .sdPlugin folder — action-list icons, default key images, and mute dial images
  *
  * Run with `npm run icons` after changing glyphs or the key design. Output is committed.
@@ -33,13 +33,18 @@ const LUCIDE: Record<string, string> = {
 	users: "users",
 };
 
-// Lucide has no surprised face; this follows its 24px, 2px-stroke grid.
+// Lucide has no surprised face or background-blur glyph; these follow its 24px, 2px-stroke grid.
 const CUSTOM: Record<string, string> = {
 	wow: [
 		`<circle cx="12" cy="12" r="10"/>`,
 		`<path d="M9 9.5v.5"/>`,
 		`<path d="M15 9.5v.5"/>`,
 		`<circle cx="12" cy="15.5" r="2"/>`,
+	].join(""),
+	blur: [
+		`<circle cx="12" cy="10" r="3"/>`,
+		`<path d="M7 18.5a5 5 0 0 1 10 0"/>`,
+		`<circle cx="12" cy="12" r="10" stroke-dasharray="1.5 3.2"/>`,
 	].join(""),
 };
 
