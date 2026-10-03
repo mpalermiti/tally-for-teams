@@ -529,6 +529,13 @@ func meetingWindowFocusError(_ app: AXUIElement, button: AXUIElement) -> String?
 	return CFEqual(focused, target) ? nil : "meeting-window-not-focused"
 }
 
+func scheduleMenuFollowUpPoll(_ app: AXUIElement) {
+	DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+		discover(app)
+		poll()
+	}
+}
+
 func element(for id: String) -> AXUIElement? {
 	if let cached = cache[id], label(cached) != nil { return cached }
 	guard let app = axApp else { return nil }
@@ -719,6 +726,7 @@ func menu(
 	while Date() < searchDeadline {
 		if deadlinePassed(deadline) {
 			closeMenu(app, items: fresh, button: button, escapeIfNoFreshItems: escapeIfNoFreshItems)
+			scheduleMenuFollowUpPoll(app)
 			return expired(req)
 		}
 		Thread.sleep(forTimeInterval: 0.1)
@@ -728,6 +736,7 @@ func menu(
 	}
 	if deadlinePassed(deadline) {
 		closeMenu(app, items: fresh, button: button, escapeIfNoFreshItems: escapeIfNoFreshItems)
+		scheduleMenuFollowUpPoll(app)
 		return expired(req)
 	}
 
@@ -755,11 +764,13 @@ func menu(
 				}
 			}
 			closeMenu(app, items: fresh, button: button, escapeIfNoFreshItems: escapeIfNoFreshItems)
+			scheduleMenuFollowUpPoll(app)
 			let missing = decision.target == "off" ? "'No background effect'" : "Background blur"
 			return result(req, false, "No \(missing) item in \(id) menu; it offered: \(offeredDescription(fresh))")
 		}
 		if deadlinePassed(deadline) {
 			closeMenu(app, items: fresh, button: button, escapeIfNoFreshItems: escapeIfNoFreshItems)
+			scheduleMenuFollowUpPoll(app)
 			return expired(req)
 		}
 		let error = AXUIElementPerformAction(chosen.element, kAXPressAction as CFString)
@@ -782,16 +793,18 @@ func menu(
 		result(req, error == .success, error == .success ? "pressed \(pressedLabel); selection: \(seen)" : "AXError \(error.rawValue); selection: \(seen)", extra: extra)
 		Thread.sleep(forTimeInterval: 0.3)
 		closeMenu(app, items: fresh, button: button, escapeIfNoFreshItems: escapeIfNoFreshItems)
-		DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: poll)
+		scheduleMenuFollowUpPoll(app)
 		return
 	}
 
 	guard let item else {
 		closeMenu(app, items: fresh, button: button, escapeIfNoFreshItems: escapeIfNoFreshItems)
+		scheduleMenuFollowUpPoll(app)
 		return result(req, false, "No \(itemIds.first ?? labels.first ?? "item") in \(id) menu; it offered: \(offeredDescription(fresh))")
 	}
 	if deadlinePassed(deadline) {
 		closeMenu(app, items: fresh, button: button, escapeIfNoFreshItems: escapeIfNoFreshItems)
+		scheduleMenuFollowUpPoll(app)
 		return expired(req)
 	}
 	let error = AXUIElementPerformAction(item.element, kAXPressAction as CFString)
@@ -801,7 +814,7 @@ func menu(
 	result(req, error == .success, error == .success ? "pressed \(pressedLabel)" : "AXError \(error.rawValue)", extra: extra)
 	Thread.sleep(forTimeInterval: 0.3)
 	closeMenu(app, items: fresh, button: button, escapeIfNoFreshItems: escapeIfNoFreshItems)
-	DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: poll)
+	scheduleMenuFollowUpPoll(app)
 }
 
 /// Closes a menu left open. On Teams 26267, pressing React again does NOT close its menu but
