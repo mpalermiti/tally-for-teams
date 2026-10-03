@@ -6,6 +6,15 @@ import { KEY_KINDS } from "../src/render/key";
 
 const manifest = JSON.parse(readFileSync(new URL("../ai.michaelp.tally.sdPlugin/manifest.json", import.meta.url), "utf8"));
 const uuids: string[] = manifest.Actions.map((a: { UUID: string }) => a.UUID);
+const pluginRoot = new URL("../ai.michaelp.tally.sdPlugin/", import.meta.url);
+
+function existingImage(ref: string): string | undefined {
+	for (const ext of [".svg", ".png"]) {
+		const path = fileURLToPath(new URL(`${ref}${ext}`, pluginRoot));
+		if (existsSync(path)) return path;
+	}
+	return undefined;
+}
 
 describe("manifest", () => {
 	it("is Tally for Teams", () => {
@@ -17,13 +26,56 @@ describe("manifest", () => {
 		expect([...uuids].sort()).toEqual(KEY_KINDS.map((kind) => `ai.michaelp.tally.${kind}`).sort());
 	});
 
-	it("doesn't offer keys that can't work yet", () => {
-		expect(uuids).not.toContain("ai.michaelp.tally.blur");
+	it("offers Background blur as a neutral menu-backed action", () => {
+		const blur = manifest.Actions.find((a: { UUID: string }) => a.UUID === "ai.michaelp.tally.blur");
+		expect(blur).toMatchObject({
+			Name: "Background blur",
+			Icon: "imgs/actions/blur/icon",
+			Tooltip: "Blur or unblur your background.",
+			Controllers: ["Keypad"],
+			States: [{ Image: "imgs/actions/blur/key", ShowTitle: false }],
+		});
 	});
 
 	it("gives Leave a settings page", () => {
 		const leave = manifest.Actions.find((a: { UUID: string }) => a.UUID === "ai.michaelp.tally.leave");
 		expect(leave.PropertyInspectorPath).toBe("ui/leave.html");
+	});
+
+	it("gives every action a settings page with the global auto-switch opt-in", () => {
+		for (const action of manifest.Actions as { Name: string; PropertyInspectorPath?: string }[]) {
+			expect(action.PropertyInspectorPath, action.Name).toBeDefined();
+			const html = readFileSync(new URL(`../ai.michaelp.tally.sdPlugin/${action.PropertyInspectorPath}`, import.meta.url), "utf8");
+			expect(html, action.Name).toContain('setting="autoSwitchProfile"');
+			expect(html, action.Name).toContain("global");
+		}
+	});
+
+	it("resolves every manifest image path to a shipped SVG or PNG", () => {
+		const refs = [
+			manifest.Icon,
+			manifest.CategoryIcon,
+			...manifest.Actions.flatMap((action: { Icon?: string; States?: { Image?: string }[]; Encoder?: { Icon?: string; background?: string } }) => [
+				action.Icon,
+				...(action.States ?? []).map((state) => state.Image),
+				action.Encoder?.Icon,
+				action.Encoder?.background,
+			]),
+		].filter(Boolean) as string[];
+
+		for (const ref of refs) expect(existingImage(ref), ref).toBeDefined();
+	});
+
+	it("uses SVGs, not PNGs, for action-list icons and default key images", () => {
+		for (const action of manifest.Actions as { Icon: string; States?: { Image?: string }[]; Encoder?: { Icon?: string; background?: string } }[]) {
+			const refs = [action.Icon, ...(action.States ?? []).map((state) => state.Image), action.Encoder?.Icon, action.Encoder?.background].filter(
+				Boolean,
+			) as string[];
+			for (const ref of refs) {
+				expect(existsSync(fileURLToPath(new URL(`${ref}.svg`, pluginRoot))), ref).toBe(true);
+				expect(existsSync(fileURLToPath(new URL(`${ref}.png`, pluginRoot))), ref).toBe(false);
+			}
+		}
 	});
 
 	it("keeps every settings page working offline", () => {

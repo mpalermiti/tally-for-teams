@@ -1,7 +1,7 @@
 {
 	"$schema": "https://schemas.elgato.com/streamdeck/plugins/manifest.json",
 	"Name": "Tally for Teams",
-	"Version": "1.0.1.0",
+	"Version": "1.1.0.0",
 	"Author": "Michael Palermiti",
 	"Description": "Live Microsoft Teams meeting controls for Stream Deck on Mac. A lit key means it's live.",
 	"URL": "https://github.com/mpalermiti/tally-for-teams",
@@ -28,11 +28,12 @@
 			"Name": "Mute",
 			"UUID": "ai.michaelp.tally.mute",
 			"Icon": "imgs/actions/mute/icon",
-			"Tooltip": "Toggle your microphone. Lit while your mic is live. On a Stream Deck+ dial: hold to talk, turn to mute or unmute.",
+			"Tooltip": "Toggle your microphone. Lit while your mic is live. Hold to talk while muted. On a Stream Deck+ dial: turn to mute or unmute.",
 			"Controllers": [
 				"Keypad",
 				"Encoder"
 			],
+			"PropertyInspectorPath": "ui/settings.html",
 			"States": [
 				{
 					"Image": "imgs/actions/mute/key",
@@ -58,9 +59,26 @@
 			"Controllers": [
 				"Keypad"
 			],
+			"PropertyInspectorPath": "ui/settings.html",
 			"States": [
 				{
 					"Image": "imgs/actions/camera/key",
+					"ShowTitle": false
+				}
+			]
+		},
+		{
+			"Name": "Background blur",
+			"UUID": "ai.michaelp.tally.blur",
+			"Icon": "imgs/actions/blur/icon",
+			"Tooltip": "Blur or unblur your background.",
+			"Controllers": [
+				"Keypad"
+			],
+			"PropertyInspectorPath": "ui/settings.html",
+			"States": [
+				{
+					"Image": "imgs/actions/blur/key",
 					"ShowTitle": false
 				}
 			]
@@ -73,6 +91,7 @@
 			"Controllers": [
 				"Keypad"
 			],
+			"PropertyInspectorPath": "ui/settings.html",
 			"States": [
 				{
 					"Image": "imgs/actions/hand/key",
@@ -120,6 +139,7 @@
 			"Controllers": [
 				"Keypad"
 			],
+			"PropertyInspectorPath": "ui/settings.html",
 			"States": [
 				{
 					"Image": "imgs/actions/chat/key",
@@ -135,12 +155,59 @@
 			"Controllers": [
 				"Keypad"
 			],
+			"PropertyInspectorPath": "ui/settings.html",
 			"States": [
 				{
 					"Image": "imgs/actions/share/key",
 					"ShowTitle": false
 				}
 			]
+		},
+		{
+			"Name": "Meeting timer",
+			"UUID": "ai.michaelp.tally.timer",
+			"Icon": "imgs/actions/timer/icon",
+			"Tooltip": "How long you've been in the meeting.",
+			"Controllers": [
+				"Keypad"
+			],
+			"PropertyInspectorPath": "ui/settings.html",
+			"States": [
+				{
+					"Image": "imgs/actions/timer/key",
+					"ShowTitle": false
+				}
+			]
+		},
+		{
+			"Name": "People",
+			"UUID": "ai.michaelp.tally.people",
+			"Icon": "imgs/actions/people/icon",
+			"Tooltip": "Open or close the participant list.",
+			"Controllers": [
+				"Keypad"
+			],
+			"PropertyInspectorPath": "ui/settings.html",
+			"States": [
+				{
+					"Image": "imgs/actions/people/key",
+					"ShowTitle": false
+				}
+			]
+		}
+	],
+	"Profiles": [
+		{
+			"Name": "profiles/Tally (Stream Deck)",
+			"DeviceType": 0,
+			"Readonly": false,
+			"DontAutoSwitchWhenInstalled": true
+		},
+		{
+			"Name": "profiles/Tally (Stream Deck +)",
+			"DeviceType": 7,
+			"Readonly": false,
+			"DontAutoSwitchWhenInstalled": true
 		}
 	]
 }

@@ -3,8 +3,8 @@
  * match the real thing:
  *   docs/art/hero.svg          a Stream Deck MK.2 mid-meeting
  *   docs/art/demo.svg          animated: press Mute, raise a hand in Teams, press Share
- *   docs/art/keys.svg          the seven keys, labelled
- *   docs/art/keys-compact.svg  the seven keys in two phone-sized rows
+ *   docs/art/keys.svg          the ten keys, labelled
+ *   docs/art/keys-compact.svg  the ten keys in three phone-sized rows
  *   docs/art/icon.svg          favicon (the plugin mark)
  *   docs/art/apple-touch-icon.svg full-bleed opaque iOS touch icon
  *   docs/art/social.svg        1280×640 link preview
@@ -22,15 +22,17 @@ import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { GLYPHS, type GlyphName } from "../src/render/glyphs";
-import { keySvg, markSvg, visualFor, type KeyKind } from "../src/render/key";
+import { KEY_KINDS, keySvg, markSvg, timerFace, visualFor, type KeyKind } from "../src/render/key";
 import {
 	EMPTY_STATE,
 	NO_PERMISSIONS,
+	REACTIONS,
 	type MeetingPermissions,
 	type MeetingState,
 	type Reaction,
 	type Snapshot,
 } from "../src/teams/protocol";
+import { PROFILES } from "./profiles";
 
 const ALLOWED = Object.fromEntries(Object.keys(NO_PERMISSIONS).map((key) => [key, true])) as unknown as MeetingPermissions;
 const inMeeting = (state: Partial<MeetingState> = {}): Snapshot => ({
@@ -53,26 +55,32 @@ const GAP = 34;
 const PAD = 58;
 const DEVICE_W = PAD * 2 + 5 * KEY + 4 * GAP;
 const DEVICE_H = PAD * 2 + 3 * KEY + 2 * GAP;
+const TIMER_SECONDS = 24 * 60 + 17;
 
 type Slot = { kind: KeyKind; reaction?: Reaction } | null;
-/** The MK.2 layout used everywhere: meeting keys, reactions, Leave in the far corner. */
-const LAYOUT: Slot[] = [
-	{ kind: "mute" },
-	{ kind: "camera" },
-	{ kind: "hand" },
-	{ kind: "share" },
-	{ kind: "chat" },
-	{ kind: "react", reaction: "like" },
-	{ kind: "react", reaction: "love" },
-	{ kind: "react", reaction: "applause" },
-	{ kind: "react", reaction: "laugh" },
-	{ kind: "react", reaction: "wow" },
-	null,
-	null,
-	null,
-	null,
-	{ kind: "leave" },
-];
+
+/** The MK.2 layout used in the hero and demo, read from the bundled Stream Deck profile. */
+const LAYOUT: Slot[] = bundledMk2Layout();
+
+function bundledMk2Layout(): Slot[] {
+	const profile = PROFILES.find(({ deviceType }) => deviceType === 0);
+	if (!profile) throw new Error("Missing bundled Stream Deck profile");
+	const keyKinds = new Set<string>(KEY_KINDS);
+	const reactions = new Set<string>(REACTIONS);
+	return Array.from({ length: profile.columns * profile.rows }, (_, index) => {
+		const column = index % profile.columns;
+		const row = Math.floor(index / profile.columns);
+		const action = profile.keys[`${column},${row}`];
+		if (!action) return null;
+		const kind = action.uuid.split(".").at(-1);
+		if (!kind || !keyKinds.has(kind)) throw new Error(`Unknown profile action ${action.uuid}`);
+		const reaction = action.settings?.reaction;
+		return {
+			kind: kind as KeyKind,
+			...(typeof reaction === "string" && reactions.has(reaction) ? { reaction: reaction as Reaction } : {}),
+		};
+	});
+}
 
 /** Hands out ids, so several key faces (each with its own gradient) can share one SVG. */
 class Ids {
@@ -82,15 +90,21 @@ class Ids {
 	}
 }
 
-/** A key face's inner markup, with its gradient id made unique. Empty slots are dark. */
-function face(slot: Slot, snapshot: Snapshot, ids: Ids): string {
-	if (!slot) return `<rect width="${KEY}" height="${KEY}" fill="#0B0B0D"/>`;
+/** A key face's inner markup, with its gradient id made unique. */
+function innerFace(markup: string, ids: Ids): string {
 	const id = ids.next("g");
-	return keySvg(visualFor(slot.kind, snapshot, { reaction: slot.reaction }))
+	return markup
 		.replace(/^<svg[^>]*>/, "")
 		.replace(/<\/svg>$/, "")
 		.replaceAll('id="g"', `id="${id}"`)
 		.replaceAll("url(#g)", `url(#${id})`);
+}
+
+/** A key face's inner markup. Empty slots are dark. */
+function face(slot: Slot, snapshot: Snapshot, ids: Ids): string {
+	if (!slot) return `<rect width="${KEY}" height="${KEY}" fill="#0B0B0D"/>`;
+	if (slot.kind === "timer") return innerFace(timerFace(TIMER_SECONDS, "ready"), ids);
+	return innerFace(keySvg(visualFor(slot.kind, snapshot, { reaction: slot.reaction })), ids);
 }
 
 /** A key with rounded corners; `inner` may stack several faces. */
@@ -139,17 +153,17 @@ const svgDoc = (width: number, height: number, label: string, body: string) =>
 
 const card = (width: number, height: number) => `<rect width="${width}" height="${height}" rx="32" fill="${PAPER}"/>`;
 
-/** The hero: an MK.2 mid-meeting, mic and camera live, Leave red. */
+/** The hero: an MK.2 mid-meeting, mic and camera live, recording dot, timer and Leave red. */
 export function heroSvg(): string {
 	const ids = new Ids();
-	const snapshot = inMeeting({ isMuted: false, isVideoOn: true });
+	const snapshot = inMeeting({ isMuted: false, isVideoOn: true, isRecording: true, meetingElapsedSeconds: TIMER_SECONDS });
 	const W = 1400;
 	const H = 900;
 	const body = device((_, slot) => face(slot, snapshot, ids), ids);
 	return svgDoc(
 		W,
 		H,
-		"A Stream Deck with Tally keys mid-meeting: mic and camera lit, Leave in red",
+		"A Stream Deck with Tally keys mid-meeting: mic and camera lit with recording dots, timer at 24:17, Leave in red",
 		`<defs>${DEVICE_DEFS}</defs>${card(W, H)}<g transform="translate(${(W - DEVICE_W) / 2} ${(H - DEVICE_H) / 2 - 10})">${body}</g>`,
 	);
 }
@@ -161,6 +175,9 @@ const KEY_STRIP_KEYS: [Slot, string][] = [
 	[{ kind: "share" }, "Share"],
 	[{ kind: "chat" }, "Chat"],
 	[{ kind: "react", reaction: "like" }, "React"],
+	[{ kind: "people" }, "People"],
+	[{ kind: "blur" }, "Blur"],
+	[{ kind: "timer" }, "Meeting timer"],
 	[{ kind: "leave" }, "Leave"],
 ];
 
@@ -171,34 +188,38 @@ function labeledKey(slot: Slot, label: string, ids: Ids, snapshot: Snapshot, fon
 	);
 }
 
-/** The seven keys in a row, lit as in a meeting, each labelled. For the site. */
+/** The ten keys in two rows, lit as in a meeting, each labelled. For the site. */
 export function keysSvg(): string {
 	const ids = new Ids();
-	const snapshot = inMeeting({ isMuted: false, isVideoOn: true, isHandRaised: true, isSharing: true });
+	const snapshot = inMeeting({ isMuted: false, isVideoOn: true, isHandRaised: true, isSharing: true, isRecording: true });
 	const STEP = KEY + 56;
-	const W = KEY_STRIP_KEYS.length * KEY + (KEY_STRIP_KEYS.length - 1) * 56;
-	const H = KEY + 52;
+	const W = 5 * KEY + 4 * 56;
+	const H = 416;
 	let body = "";
-	KEY_STRIP_KEYS.forEach(([slot, label], i) => {
-		body += `<g transform="translate(${i * STEP} 0)">${labeledKey(slot, label, ids, snapshot)}</g>`;
+	[KEY_STRIP_KEYS.slice(0, 5), KEY_STRIP_KEYS.slice(5)].forEach((row, rowIndex) => {
+		body += `<g transform="translate(0 ${rowIndex * 220})">`;
+		row.forEach(([slot, label], i) => {
+			body += `<g transform="translate(${i * STEP} 0)">${labeledKey(slot, label, ids, snapshot, label.length > 14 ? 18 : 22)}</g>`;
+		});
+		body += "</g>";
 	});
 	return svgDoc(
 		W,
 		H,
-		"The seven Tally keys: Mute, Camera, Raise hand, Share, Chat, React and Leave",
+		"The ten Tally keys: Mute, Camera, Raise hand, Share, Chat, React, People, Blur, Meeting timer and Leave",
 		`<defs><filter id="keyStripShadow" x="-12%" y="-8%" width="124%" height="126%"><feGaussianBlur stdDeviation="4"/></filter></defs>${body}`,
 	);
 }
 
-/** The same seven keys in two centered, phone-legible rows. */
+/** The same ten keys in three centered, phone-legible rows. */
 export function keysCompactSvg(): string {
 	const ids = new Ids();
-	const snapshot = inMeeting({ isMuted: false, isVideoOn: true, isHandRaised: true, isSharing: true });
+	const snapshot = inMeeting({ isMuted: false, isVideoOn: true, isHandRaised: true, isSharing: true, isRecording: true });
 	const W = 720;
-	const H = 420;
+	const H = 640;
 	const STEP = KEY + 40;
 	const ROW_GAP = 220;
-	const rows = [KEY_STRIP_KEYS.slice(0, 4), KEY_STRIP_KEYS.slice(4)];
+	const rows = [KEY_STRIP_KEYS.slice(0, 4), KEY_STRIP_KEYS.slice(4, 7), KEY_STRIP_KEYS.slice(7)];
 	let body = "";
 	rows.forEach((row, rowIndex) => {
 		const rowWidth = row.length * KEY + (row.length - 1) * 40;
@@ -206,14 +227,14 @@ export function keysCompactSvg(): string {
 		const y = rowIndex * ROW_GAP;
 		body += `<g transform="translate(${x} ${y})">`;
 		row.forEach(([slot, label], i) => {
-			body += `<g transform="translate(${i * STEP} 0)">${labeledKey(slot, label, ids, snapshot, 24)}</g>`;
+			body += `<g transform="translate(${i * STEP} 0)">${labeledKey(slot, label, ids, snapshot, label.length > 14 ? 19 : 24)}</g>`;
 		});
 		body += "</g>";
 	});
 	return svgDoc(
 		W,
 		H,
-		"The seven Tally keys: Mute, Camera, Raise hand, Share, Chat, React and Leave",
+		"The ten Tally keys: Mute, Camera, Raise hand, Share, Chat, React, People, Blur, Meeting timer and Leave",
 		`<defs><filter id="keyStripShadow" x="-12%" y="-8%" width="124%" height="126%"><feGaussianBlur stdDeviation="4"/></filter></defs>${body}`,
 	);
 }
@@ -221,7 +242,7 @@ export function keysCompactSvg(): string {
 /** The 1280×640 link preview: name and one line beside the device. */
 export function socialSvg(): string {
 	const ids = new Ids();
-	const snapshot = inMeeting({ isMuted: false, isVideoOn: true });
+	const snapshot = inMeeting({ isMuted: false, isVideoOn: true, isRecording: true, meetingElapsedSeconds: TIMER_SECONDS });
 	const W = 1280;
 	const H = 640;
 	const scale = 0.55;

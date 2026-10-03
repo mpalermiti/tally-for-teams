@@ -8,11 +8,13 @@
 export type TeamsAction =
 	| "toggle-mute"
 	| "toggle-video"
+	| "set-background-blur"
 	| "toggle-hand"
 	| "leave-call"
 	| "send-reaction"
 	| "toggle-ui"
 	| "stop-sharing"
+	| "toggle-people"
 	| "query-state";
 
 export type Reaction = "like" | "love" | "applause" | "laugh" | "wow";
@@ -24,7 +26,7 @@ export type UiTarget = "chat" | "sharing-tray";
 export type ActionParameters = { type: Reaction | UiTarget } | Record<string, never>;
 
 /** Why keys are dimmed while offline; shown in words on the Stream Deck+ dial. */
-export type OfflineReason = "no-permission" | "teams-not-running" | "starting";
+export type OfflineReason = "no-permission" | "teams-not-running" | "starting" | "teams-changed";
 
 /** What every key renders from. Replaced (never mutated) on each change. */
 export interface Snapshot {
@@ -38,46 +40,75 @@ export interface Snapshot {
 export interface RequestResult {
 	ok: boolean;
 	message: string;
+	/** Stable helper error code for plugin-side handling. */
+	error?: string;
+	/** Optional AXSelected/AXValue state reported by a menu item, when Teams exposes one. */
+	selected?: boolean;
 }
 
 export interface MeetingState {
 	isMuted: boolean;
+	isMuteKnown: boolean;
 	isVideoOn: boolean;
+	isVideoKnown: boolean;
+	isBackgroundBlurred: boolean;
+	isBackgroundBlurKnown: boolean;
 	isHandRaised: boolean;
 	isInMeeting: boolean;
 	isSharing: boolean;
+	isSharingKnown: boolean;
 	hasUnreadMessages: boolean;
+	isRecording: boolean;
+	/** Seconds parsed from Teams' call-duration indicator, if present in the selected meeting window. */
+	meetingElapsedSeconds?: number;
 }
 
 export interface MeetingPermissions {
 	canToggleMute: boolean;
 	canToggleVideo: boolean;
+	canToggleBlur: boolean;
 	canToggleHand: boolean;
 	canLeave: boolean;
 	canReact: boolean;
 	canToggleShareTray: boolean;
 	canToggleChat: boolean;
+	canTogglePeople: boolean;
 	canStopSharing: boolean;
 	canPair: boolean;
 }
 
 export const EMPTY_STATE: MeetingState = {
 	isMuted: false,
+	isMuteKnown: true,
 	isVideoOn: false,
+	isVideoKnown: true,
+	isBackgroundBlurred: false,
+	isBackgroundBlurKnown: false,
 	isHandRaised: false,
 	isInMeeting: false,
 	isSharing: false,
+	isSharingKnown: true,
 	hasUnreadMessages: false,
+	isRecording: false,
+};
+
+export const UNKNOWN_CONTROL_STATE: MeetingState = {
+	...EMPTY_STATE,
+	isMuteKnown: false,
+	isVideoKnown: false,
+	isSharingKnown: false,
 };
 
 export const NO_PERMISSIONS: MeetingPermissions = {
 	canToggleMute: false,
 	canToggleVideo: false,
+	canToggleBlur: false,
 	canToggleHand: false,
 	canLeave: false,
 	canReact: false,
 	canToggleShareTray: false,
 	canToggleChat: false,
+	canTogglePeople: false,
 	canStopSharing: false,
 	canPair: false,
 };

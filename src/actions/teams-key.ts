@@ -14,8 +14,11 @@ import { keyDataUrl, visualFor, type KeyKind, type KeyOverlay } from "../render/
 import type { TeamsBridge } from "../teams/bridge";
 import type { RequestResult } from "../teams/protocol";
 import type { Reaction } from "../teams/protocol";
+import { FailureWarningLimiter } from "./failure-warning";
 
 export type KeySettings = { reaction?: Reaction; holdToLeave?: boolean };
+
+const failureWarnings = new FailureWarningLimiter();
 
 /**
  * Shared behaviour for every Teams key: draw from the live meeting snapshot,
@@ -42,12 +45,28 @@ export abstract class TeamsKey extends SingletonAction<KeySettings> {
 	}
 
 	/** Runs a Teams request and flashes the key or dial if Teams refuses it. */
-	protected async perform(action: KeyAction<KeySettings> | DialAction<KeySettings>, request: Promise<RequestResult>): Promise<void> {
+	protected async perform(
+		action: KeyAction<KeySettings> | DialAction<KeySettings>,
+		request: Promise<RequestResult>,
+		{ alert = true }: { alert?: boolean } = {},
+	): Promise<void> {
 		const result = await request;
+		await this.reportResult(action, result, { alert });
+	}
+
+	protected async reportResult(
+		action: KeyAction<KeySettings> | DialAction<KeySettings>,
+		result: RequestResult,
+		{ alert = true }: { alert?: boolean } = {},
+	): Promise<void> {
 		if (!result.ok) {
-			streamDeck.logger.warn(`${this.kind}: ${result.message}`);
-			await action.showAlert();
+			if (failureWarnings.shouldWarn(this.kind, result)) this.warn(result.message);
+			if (alert) await action.showAlert();
 		}
+	}
+
+	protected warn(message: string): void {
+		streamDeck.logger.warn(`${this.kind}: ${message}`);
 	}
 
 	override onWillAppear(ev: WillAppearEvent<KeySettings>): Promise<void> {
@@ -88,9 +107,10 @@ export abstract class TeamsKey extends SingletonAction<KeySettings> {
 	async #draw(action: Action<KeySettings>): Promise<void> {
 		if (action.isKey()) {
 			const settings = this.#settings.get(action.id) ?? {};
+			const overlay = this.#overlays.get(action.id) ?? (this.teams.snapshot.reason === "teams-changed" ? { hint: "?" } : undefined);
 			const image = keyDataUrl(
 				visualFor(this.kind, this.teams.snapshot, { reaction: settings.reaction }),
-				this.#overlays.get(action.id),
+				overlay,
 			);
 			if (this.#drawn.get(action.id) === image) return;
 			this.#drawn.set(action.id, image);

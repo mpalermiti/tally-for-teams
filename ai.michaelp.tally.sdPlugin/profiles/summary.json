@@ -1,0 +1,114 @@
+{
+	"version": 1,
+	"sourceHash": "5c33710315e10491256c84321d6f89f83c310351de752772a8103870218ecebb",
+	"profiles": {
+		"profiles/Tally (Stream Deck)": {
+			"deviceType": 0,
+			"model": "20GBA9901",
+			"keys": {
+				"0,0": {
+					"uuid": "ai.michaelp.tally.mute"
+				},
+				"0,1": {
+					"uuid": "ai.michaelp.tally.react",
+					"settings": {
+						"reaction": "like"
+					}
+				},
+				"0,2": {
+					"uuid": "ai.michaelp.tally.people"
+				},
+				"1,0": {
+					"uuid": "ai.michaelp.tally.camera"
+				},
+				"1,1": {
+					"uuid": "ai.michaelp.tally.react",
+					"settings": {
+						"reaction": "love"
+					}
+				},
+				"1,2": {
+					"uuid": "ai.michaelp.tally.blur"
+				},
+				"2,0": {
+					"uuid": "ai.michaelp.tally.hand"
+				},
+				"2,1": {
+					"uuid": "ai.michaelp.tally.react",
+					"settings": {
+						"reaction": "applause"
+					}
+				},
+				"2,2": {
+					"uuid": "ai.michaelp.tally.timer"
+				},
+				"3,0": {
+					"uuid": "ai.michaelp.tally.share"
+				},
+				"3,1": {
+					"uuid": "ai.michaelp.tally.react",
+					"settings": {
+						"reaction": "laugh"
+					}
+				},
+				"4,0": {
+					"uuid": "ai.michaelp.tally.chat"
+				},
+				"4,1": {
+					"uuid": "ai.michaelp.tally.react",
+					"settings": {
+						"reaction": "wow"
+					}
+				},
+				"4,2": {
+					"uuid": "ai.michaelp.tally.leave",
+					"settings": {
+						"holdToLeave": true
+					}
+				}
+			},
+			"dials": {}
+		},
+		"profiles/Tally (Stream Deck +)": {
+			"deviceType": 7,
+			"model": "20GBD9901",
+			"keys": {
+				"0,0": {
+					"uuid": "ai.michaelp.tally.mute"
+				},
+				"0,1": {
+					"uuid": "ai.michaelp.tally.react",
+					"settings": {
+						"reaction": "like"
+					}
+				},
+				"1,0": {
+					"uuid": "ai.michaelp.tally.camera"
+				},
+				"1,1": {
+					"uuid": "ai.michaelp.tally.people"
+				},
+				"2,0": {
+					"uuid": "ai.michaelp.tally.hand"
+				},
+				"2,1": {
+					"uuid": "ai.michaelp.tally.timer"
+				},
+				"3,0": {
+					"uuid": "ai.michaelp.tally.share"
+				},
+				"3,1": {
+					"uuid": "ai.michaelp.tally.leave",
+					"settings": {
+						"holdToLeave": true
+					}
+				}
+			},
+			"dials": {
+				"0,0": {
+					"uuid": "ai.michaelp.tally.mute"
+				}
+			}
+		}
+	}
+}

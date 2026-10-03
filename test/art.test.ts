@@ -26,16 +26,25 @@ describe("docs/art", () => {
 		const hero = buildArt()["hero.svg"];
 		expect(hero).toContain('viewBox="0 0 1400 900"');
 		expect(hero).toContain("radialGradient"); // lit keys (mic, camera, leave)
+		expect(hero).toContain(">24:17<");
+		expect(hero).toContain('data-badge="recording"');
 		expect(hero).not.toContain('id="g"'); // key gradient ids are made unique
 	});
 
-	it("draws compact keys as two phone-legible rows", () => {
+	it("draws compact keys as three phone-legible rows", () => {
 		const keys = buildArt()["keys-compact.svg"];
 		expect(keys).toBeDefined();
-		expect(keys).toContain('viewBox="0 0 720 420"');
-		expect(keys).toContain('aria-label="The seven Tally keys: Mute, Camera, Raise hand, Share, Chat, React and Leave"');
+		expect(keys).toContain('viewBox="0 0 720 640"');
+		expect(keys).toContain(
+			'aria-label="The ten Tally keys: Mute, Camera, Raise hand, Share, Chat, React, People, Blur, Meeting timer and Leave"',
+		);
+		expect(keys).toContain(">Blur<");
+		expect(keys).toContain(">Meeting timer<");
+		expect(keys).toContain(">People<");
+		expect(keys).toContain(">24:17<");
 		expect(keys).toContain('translate(12 0)');
 		expect(keys).toContain('translate(104 220)');
+		expect(keys).toContain('translate(104 440)');
 		expect(keys).not.toContain('id="g"');
 	});
 
