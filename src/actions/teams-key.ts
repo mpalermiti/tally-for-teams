@@ -14,8 +14,11 @@ import { keyDataUrl, visualFor, type KeyKind, type KeyOverlay } from "../render/
 import type { TeamsBridge } from "../teams/bridge";
 import type { RequestResult } from "../teams/protocol";
 import type { Reaction } from "../teams/protocol";
+import { FailureWarningLimiter } from "./failure-warning";
 
 export type KeySettings = { reaction?: Reaction; holdToLeave?: boolean };
+
+const failureWarnings = new FailureWarningLimiter();
 
 /**
  * Shared behaviour for every Teams key: draw from the live meeting snapshot,
@@ -57,7 +60,7 @@ export abstract class TeamsKey extends SingletonAction<KeySettings> {
 		{ alert = true }: { alert?: boolean } = {},
 	): Promise<void> {
 		if (!result.ok) {
-			this.warn(result.message);
+			if (failureWarnings.shouldWarn(this.kind, result)) this.warn(result.message);
 			if (alert) await action.showAlert();
 		}
 	}

@@ -197,9 +197,11 @@ export class TeamsBridge extends EventEmitter<{ change: [Snapshot] }> {
 			if (!pending) return;
 			this.#pending.delete(message.req);
 			clearTimeout(pending.timer);
+			const error = typeof message.error === "string" ? message.error : undefined;
 			pending.resolve({
 				ok: message.ok === true,
 				message: message.message ?? message.error ?? "",
+				...(error !== undefined ? { error } : {}),
 				...(typeof message.selected === "boolean" ? { selected: message.selected } : {}),
 			});
 		} else if (message.type === "log" && message.message) {

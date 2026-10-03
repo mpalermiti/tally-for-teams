@@ -169,6 +169,19 @@ func windows(of app: AXUIElement) -> [AXUIElement] {
 	(value(app, kAXWindowsAttribute) as? [AXUIElement]) ?? []
 }
 
+func axElement(_ raw: AnyObject?) -> AXUIElement? {
+	guard let raw, CFGetTypeID(raw) == AXUIElementGetTypeID() else { return nil }
+	return (raw as! AXUIElement)
+}
+
+func window(of element: AXUIElement) -> AXUIElement? {
+	axElement(value(element, kAXWindowAttribute))
+}
+
+func focusedWindow(of app: AXUIElement) -> AXUIElement? {
+	axElement(value(app, kAXFocusedWindowAttribute))
+}
+
 /// Every control under `root`. Bounded so a huge tree can't stall the helper.
 func controls(under root: AXUIElement, maxNodes: Int = 40_000) -> [AXUIElement] {
 	var found: [AXUIElement] = []
@@ -258,6 +271,7 @@ var cache: [String: AXUIElement] = [:]
 var indicatorContainers: [String: AXUIElement] = [:]
 var meetingMarkers: [String] = []
 var meetingMarkerControlIDs: [String] = []
+var meetingWindow: AXUIElement?
 var lastDiscovery = Date.distantPast
 var lastStatus = ""
 var promptedThisSession = false
@@ -318,6 +332,7 @@ func discover(_ app: AXUIElement) {
 	var bestMarkers: [String] = []
 	var bestMarkerControlIDs: [String] = []
 	var bestIndicatorContainers: [String: AXUIElement] = [:]
+	var bestWindow: AXUIElement?
 	var bestScore = -1
 	for window in windows(of: app) {
 		let scan = scanWindow(window, wanted: wanted, markers: markerIDs, indicatorContainerIDs: indicatorContainerIDs)
@@ -328,6 +343,7 @@ func discover(_ app: AXUIElement) {
 			bestMarkers = hasAnchor ? [] : scan.markers
 			bestMarkerControlIDs = hasAnchor || scan.markers.isEmpty ? [] : scan.markerControlIDs
 			bestIndicatorContainers = scan.indicatorContainers
+			bestWindow = window
 			bestScore = score
 		}
 	}
@@ -335,6 +351,7 @@ func discover(_ app: AXUIElement) {
 	indicatorContainers = bestIndicatorContainers
 	meetingMarkers = bestMarkers
 	meetingMarkerControlIDs = bestMarkerControlIDs
+	meetingWindow = bestWindow
 }
 
 /// The cached buttons that are still on screen.
@@ -410,6 +427,7 @@ func poll() {
 			indicatorContainers = [:]
 			meetingMarkers = []
 			meetingMarkerControlIDs = []
+			meetingWindow = nil
 			lastDiscovery = .distantPast
 			indicatorFastRediscoverySpent = false
 			fallbackBlurTurnedOnMenus.removeAll()
@@ -447,6 +465,7 @@ func poll() {
 		indicatorContainers = [:]
 		meetingMarkers = []
 		meetingMarkerControlIDs = []
+		meetingWindow = nil
 		indicatorFastRediscoverySpent = false
 		fallbackBlurTurnedOnMenus.removeAll()
 		anchorMissingSince = nil
@@ -502,6 +521,12 @@ func deadlinePassed(_ raw: Any?) -> Bool {
 
 func expired(_ req: Any?) {
 	result(req, false, "expired", extra: ["error": "expired"])
+}
+
+func meetingWindowFocusError(_ app: AXUIElement, button: AXUIElement) -> String? {
+	guard let focused = focusedWindow(of: app) else { return nil }
+	guard let target = meetingWindow ?? window(of: button) else { return nil }
+	return CFEqual(focused, target) ? nil : "meeting-window-not-focused"
 }
 
 func element(for id: String) -> AXUIElement? {
@@ -660,6 +685,14 @@ func menu(
 	guard let app = axApp else { return result(req, false, "Teams isn't running") }
 	guard let button = element(for: id) else { return result(req, false, "No \(id) on screen") }
 	guard ensurePressable(button) else { return result(req, false, "No AXPress action for \(id)") }
+	if let error = meetingWindowFocusError(app, button: button) {
+		return result(
+			req,
+			false,
+			"Teams' main window has focus, so its menus can't close from the background. Click the meeting window once.",
+			extra: ["error": error]
+		)
+	}
 	guard !deadlinePassed(deadline) else { return expired(req) }
 
 	let before = controls(in: app)
@@ -829,6 +862,7 @@ func handle(_ line: String) {
 		indicatorContainers = [:]
 		meetingMarkers = []
 		meetingMarkerControlIDs = []
+		meetingWindow = nil
 		lastDiscovery = .distantPast
 		indicatorFastRediscoverySpent = false
 		fallbackBlurTurnedOnMenus.removeAll()

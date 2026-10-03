@@ -190,6 +190,29 @@ describe("TeamsBridge", () => {
 		await expect(pending).resolves.toEqual({ ok: false, message: "No surprised/wow in menu" });
 	});
 
+	it("keeps helper error codes on failed menu requests", async () => {
+		start();
+		latest().status({ [BUTTON_IDS.mute]: "Mute mic" });
+		await until(() => bridge.snapshot.online);
+
+		const pending = bridge.request("send-reaction", { type: "like" });
+		await until(() => latest().written.some((m) => m.cmd === "menu"));
+		const sent = latest().written.find((m) => m.cmd === "menu");
+		latest().say({
+			type: "result",
+			req: sent.req,
+			ok: false,
+			message: "Teams' main window has focus, so its menus can't close from the background. Click the meeting window once.",
+			error: "meeting-window-not-focused",
+		});
+
+		await expect(pending).resolves.toEqual({
+			ok: false,
+			message: "Teams' main window has focus, so its menus can't close from the background. Click the meeting window once.",
+			error: "meeting-window-not-focused",
+		});
+	});
+
 	it("sends Background blur as a bridge-side toggle through the video options menu", async () => {
 		start();
 		latest().status({ [BUTTON_IDS.mute]: "Mute mic", "video-button-configure": "Open video options" });

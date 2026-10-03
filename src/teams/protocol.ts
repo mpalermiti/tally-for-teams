@@ -40,6 +40,8 @@ export interface Snapshot {
 export interface RequestResult {
 	ok: boolean;
 	message: string;
+	/** Stable helper error code for plugin-side handling. */
+	error?: string;
 	/** Optional AXSelected/AXValue state reported by a menu item, when Teams exposes one. */
 	selected?: boolean;
 }
