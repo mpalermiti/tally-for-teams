@@ -525,7 +525,7 @@ func expired(_ req: Any?) {
 
 func meetingWindowFocusError(_ app: AXUIElement, button: AXUIElement) -> String? {
 	guard let focused = focusedWindow(of: app) else { return nil }
-	guard let target = meetingWindow ?? window(of: button) else { return nil }
+	guard let target = window(of: button) ?? meetingWindow else { return nil }
 	return CFEqual(focused, target) ? nil : "meeting-window-not-focused"
 }
 
