@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
 
 import { SHOTS, imageSize, sourceHash } from "../scripts/render3d";
 import { THREE_FILES, THREE_VERSION, checkSha256 } from "../scripts/render3d/three";
@@ -62,5 +63,14 @@ describe("render3d image sizes", () => {
 
 	it("throws for unsupported image data", () => {
 		expect(() => imageSize(Buffer.from("nope"))).toThrow(/image size/i);
+	});
+});
+
+describe("render3d package script", () => {
+	it("wires npm run art:3d through tsx", () => {
+		const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as {
+			scripts: Record<string, string>;
+		};
+		expect(pkg.scripts["art:3d"]).toBe("node --import tsx scripts/render3d.ts");
 	});
 });

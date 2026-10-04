@@ -10,6 +10,7 @@
     "icons": "node --import tsx scripts/icons.ts",
     "profiles": "node --import tsx scripts/profiles.ts",
     "art": "node --import tsx scripts/art.ts",
+    "art:3d": "node --import tsx scripts/render3d.ts",
     "link": "streamdeck link ai.michaelp.tally.sdPlugin",
     "pack": "npm run build && mkdir -p dist && streamdeck pack ai.michaelp.tally.sdPlugin --force --output dist",
     "smoke": "node scripts/smoke.mjs",

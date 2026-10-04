@@ -1,8 +1,13 @@
+import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { deviceKeyFaces, floatingKeyFaces } from "./art";
-import { THREE_FILES, THREE_VERSION } from "./render3d/three";
+import { THREE_FILES, THREE_VERSION, ensureThree } from "./render3d/three";
 
 export type Shot = {
 	name: string;
@@ -46,6 +51,7 @@ export function sourceHash(shot: Shot, override: { faces?: string[]; scene?: str
 
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 const JPEG_SOF_MARKERS = new Set([0xc0, 0xc1, 0xc2]);
+const DEFAULT_CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 
 export function imageSize(buf: Buffer): { width: number; height: number } {
 	if (buf.length >= 24 && buf.subarray(0, PNG_SIGNATURE.length).equals(PNG_SIGNATURE)) {
@@ -70,4 +76,207 @@ export function imageSize(buf: Buffer): { width: number; height: number } {
 	}
 
 	throw new Error("Couldn't read image size");
+}
+
+type PendingSave = {
+	resolve: () => void;
+	reject: (error: Error) => void;
+};
+
+type CurrentShot = {
+	name: string;
+	reject: (error: Error) => void;
+};
+
+async function body(req: IncomingMessage): Promise<Buffer> {
+	const chunks: Buffer[] = [];
+	for await (const chunk of req) chunks.push(typeof chunk === "string" ? Buffer.from(chunk) : chunk);
+	return Buffer.concat(chunks);
+}
+
+function send(res: ServerResponse, status: number, type: string, data = ""): void {
+	res.writeHead(status, { "content-type": type });
+	res.end(data);
+}
+
+function notFound(res: ServerResponse): void {
+	send(res, 404, "text/plain", "Not found");
+}
+
+async function closeServer(server: Server): Promise<void> {
+	await new Promise<void>((resolve, reject) => {
+		server.close((error) => (error ? reject(error) : resolve()));
+	});
+}
+
+async function listen(server: Server): Promise<number> {
+	await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+	const address = server.address();
+	if (!address || typeof address === "string") throw new Error("Couldn't start render server");
+	return address.port;
+}
+
+function exitLabel(code: number | null, signal: NodeJS.Signals | null): string {
+	if (code !== null) return `exit ${code}`;
+	return signal ? `signal ${signal}` : "unknown exit";
+}
+
+async function main(): Promise<void> {
+	const chrome = process.env.CHROME ?? DEFAULT_CHROME;
+	if (!existsSync(chrome)) throw new Error(`Chrome not found at ${chrome}. Set CHROME=/path/to/chrome, then run npm run art:3d.`);
+
+	const threeDir = await ensureThree();
+	const out = fileURLToPath(new URL("../docs/art/", import.meta.url));
+	mkdirSync(out, { recursive: true });
+	const faces = { device: deviceKeyFaces(), floating: floatingKeyFaces() };
+	const allowedThree = new Set(THREE_FILES.map((file) => file.path));
+	const shotsByName = new Map(SHOTS.map((shot) => [shot.name, shot]));
+	const pending = new Map<string, PendingSave>();
+	let current: CurrentShot | undefined;
+
+	const server = createServer((req, res) => {
+		void (async () => {
+			const url = new URL(req.url ?? "/", "http://127.0.0.1");
+			if (req.method === "GET" && url.pathname === "/") {
+				send(res, 200, "text/html", readFileSync(new URL("scene.html", SCENE_DIR), "utf8"));
+				return;
+			}
+			if (req.method === "GET" && url.pathname === "/scene.js") {
+				send(res, 200, "text/javascript", readFileSync(new URL("scene.js", SCENE_DIR), "utf8"));
+				return;
+			}
+			if (req.method === "GET" && url.pathname.startsWith("/three/")) {
+				const threePath = decodeURIComponent(url.pathname.slice("/three/".length));
+				if (!allowedThree.has(threePath)) {
+					notFound(res);
+					return;
+				}
+				send(res, 200, "text/javascript", readFileSync(join(threeDir, threePath), "utf8"));
+				return;
+			}
+			if (req.method === "GET" && url.pathname === "/faces.json") {
+				send(res, 200, "application/json", JSON.stringify(faces));
+				return;
+			}
+			if (req.method === "POST" && url.pathname.startsWith("/save/")) {
+				const name = decodeURIComponent(url.pathname.slice("/save/".length));
+				if (!shotsByName.has(name)) {
+					notFound(res);
+					return;
+				}
+				const shot = pending.get(name);
+				if (!shot) {
+					send(res, 409, "text/plain", "No pending render for shot");
+					return;
+				}
+				writeFileSync(join(out, name), await body(req));
+				res.writeHead(204);
+				res.end();
+				shot.resolve();
+				return;
+			}
+			if (req.method === "POST" && url.pathname === "/error") {
+				const message = (await body(req)).toString();
+				console.error(message);
+				current?.reject(new Error(message || `${current.name}: scene failed`));
+				res.writeHead(204);
+				res.end();
+				return;
+			}
+			notFound(res);
+		})().catch((error: unknown) => {
+			const message = error instanceof Error ? error.message : String(error);
+			current?.reject(error instanceof Error ? error : new Error(message));
+			if (!res.headersSent) send(res, 500, "text/plain", message);
+			else res.end();
+		});
+	});
+
+	try {
+		const port = await listen(server);
+		for (const shot of SHOTS) {
+			const tmpProfile = mkdtempSync(join(tmpdir(), "tally-art-chrome-"));
+			let saved = false;
+			let rejectSave: (error: Error) => void = () => {};
+			const save = new Promise<void>((resolve, reject) => {
+				rejectSave = reject;
+				pending.set(shot.name, {
+					resolve: () => {
+						saved = true;
+						resolve();
+					},
+					reject,
+				});
+			});
+			current = { name: shot.name, reject: rejectSave };
+
+			const q = shot.quality ?? 0.92;
+			const url =
+				`http://127.0.0.1:${port}/?shot=${shot.shot}&name=${encodeURIComponent(shot.name)}` +
+				`&w=${shot.width}&h=${shot.height}&format=${shot.format}&q=${q}`;
+			const child = spawn(
+				chrome,
+				[
+					"--headless=new",
+					"--use-angle=metal",
+					"--enable-gpu",
+					"--hide-scrollbars",
+					"--force-device-scale-factor=1",
+					`--window-size=${shot.width},${shot.height}`,
+					`--user-data-dir=${tmpProfile}`,
+					"--no-first-run",
+					"--no-default-browser-check",
+					url,
+				],
+				{ stdio: ["ignore", "ignore", "pipe"] },
+			);
+			let stderr = "";
+			child.stderr?.on("data", (chunk: Buffer) => {
+				stderr += chunk.toString();
+				if (stderr.length > 8000) stderr = stderr.slice(-8000);
+			});
+			const childExit = new Promise<void>((resolve) => {
+				child.once("error", (error) => {
+					if (!saved) rejectSave(error);
+					resolve();
+				});
+				child.once("exit", (code, signal) => {
+					if (!saved) {
+						const detail = stderr.trim();
+						rejectSave(new Error(`${shot.name}: Chrome exited before saving (${exitLabel(code, signal)})${detail ? `\n${detail}` : ""}`));
+					}
+					resolve();
+				});
+			});
+			const timeout = setTimeout(() => rejectSave(new Error(`${shot.name}: render timed out after 90s`)), 90_000);
+			try {
+				await save;
+			} finally {
+				clearTimeout(timeout);
+				pending.delete(shot.name);
+				if (current?.name === shot.name) current = undefined;
+				if (child.exitCode === null && !child.killed) child.kill();
+				await childExit;
+				rmSync(tmpProfile, { recursive: true, force: true });
+			}
+
+			const rendered = readFileSync(join(out, shot.name));
+			const size = imageSize(rendered);
+			if (size.width !== shot.width || size.height !== shot.height) {
+				throw new Error(`${shot.name}: rendered ${size.width}×${size.height}, expected ${shot.width}×${shot.height}`);
+			}
+			writeFileSync(join(out, `${shot.name}.source`), `${sourceHash(shot)}\n`);
+		}
+	} finally {
+		await closeServer(server);
+	}
+
+	console.log(`art:3d: ${SHOTS.map((shot) => shot.name).join(", ")}`);
+}
+
+if (process.argv[1] !== undefined && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
+	main().catch((error: unknown) => {
+		console.error(`art:3d: ${error instanceof Error ? error.message : String(error)}`);
+		process.exit(1);
+	});
 }
