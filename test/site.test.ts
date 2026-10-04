@@ -43,6 +43,16 @@ describe("site", () => {
 		expect(html).toContain('<source media="(max-width: 734px)" srcset="art/keys-compact.svg" width="720" height="640">');
 	});
 
+	it("uses the 3D hero and floating keys", () => {
+		expect(html).toContain(
+			'<img class="hero-art" src="art/hero-device.jpg" width="2400" height="1350" alt="A white Stream Deck on a desk, running Tally mid-meeting: Mute and Camera lit amber with red recording dots, the timer at 24:17 and Leave in red">',
+		);
+		expect(html).toContain(
+			'<img class="keys-floating" src="art/keys-floating.jpg" width="2000" height="1000" alt="Tally keys floating: Mute live with a recording dot, hand raised, the meeting timer, Camera on and Leave">',
+		);
+		expect(html).not.toContain("art/hero.svg");
+	});
+
 	it("runs no scripts (structured data for search engines is just JSON)", () => {
 		expect(html.replace(/<script type="application\/ld\+json">[\s\S]*?<\/script>/gi, "")).not.toMatch(/<script/i);
 	});
@@ -74,7 +84,7 @@ describe("site", () => {
 		expect(html).toContain('<meta property="og:image" content="https://mpalermiti.github.io/tally-for-teams/art/social.png">');
 		expect(html).toContain('<meta property="og:image:width" content="1280">');
 		expect(html).toContain('<meta property="og:image:height" content="640">');
-		expect(html).toContain('<meta property="og:image:alt" content="Tally for Teams: a Stream Deck with Tally keys lit mid-meeting">');
+		expect(html).toContain('<meta property="og:image:alt" content="Tally for Teams: a white Stream Deck with Tally keys lit mid-meeting">');
 		expectCaseExactPath("art/social.png");
 	});
 

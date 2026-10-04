@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-import { buildArt, PNG_RENDERS } from "../scripts/art";
+import { buildArt, PNG_RENDERS, deviceKeyFaces, floatingKeyFaces } from "../scripts/art";
 
 const pngSourceHash = (target: (typeof PNG_RENDERS)[number], svg: string) =>
 	createHash("sha256")
@@ -22,13 +22,20 @@ describe("docs/art", () => {
 		expect(readFileSync(new URL(`../docs/art/${name}`, import.meta.url), "utf8")).toBe(svg);
 	});
 
-	it("draws the hero from the real key faces", () => {
-		const hero = buildArt()["hero.svg"];
-		expect(hero).toContain('viewBox="0 0 1400 900"');
-		expect(hero).toContain("radialGradient"); // lit keys (mic, camera, leave)
-		expect(hero).toContain(">24:17<");
-		expect(hero).toContain('data-badge="recording"');
-		expect(hero).not.toContain('id="g"'); // key gradient ids are made unique
+	it("leaves the hero and social card to the 3D renderer", () => {
+		expect(buildArt()).not.toHaveProperty("hero.svg");
+		expect(buildArt()).not.toHaveProperty("social.svg");
+		expect(PNG_RENDERS.map(({ name }) => name)).toEqual(["icon-32.png", "apple-touch-icon.png"]);
+	});
+
+	it("exports the 15 MK.2 key faces as standalone 144px SVGs", () => {
+		const faces = deviceKeyFaces();
+		expect(faces).toHaveLength(15);
+		for (const svg of faces) expect(svg).toMatch(/^<svg xmlns="http:\/\/www.w3.org\/2000\/svg" viewBox="0 0 144 144"/);
+		expect(faces[0]).toContain('data-badge="recording"'); // Mute: live, recorded
+		expect(faces.join("")).toContain(">24:17<");
+		expect(Object.keys(floatingKeyFaces())).toEqual(["mute", "camera", "hand", "timer", "leave"]);
+		expect(floatingKeyFaces().hand).not.toContain('data-badge="recording"');
 	});
 
 	it("draws compact keys as three phone-legible rows", () => {

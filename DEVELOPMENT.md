@@ -41,13 +41,20 @@ npm run profiles        # regenerate bundled Stream Deck profiles and manifest P
 npm run sheet -- out.png   # render all keys in all states to one image
 ```
 
-`npm run art` regenerates the README and site art in `docs/art/` from the key renderer. It renders
-the PNGs (the social image and favicons) with Google Chrome at its default macOS path, or set
-`CHROME=/path/to/chrome`. Without Chrome, it still regenerates the SVGs and skips PNGs that are
-already current. A test fails if anything is stale. `docs/keys.png` (`npm run sheet -- docs/keys.png`)
-shows every key in every state. After key-design changes, run both `npm run icons` and `npm run art`.
-The site is plain HTML/CSS in `site/`; `.github/workflows/pages.yml` publishes it with `docs/art/`
-once the repo is public.
+`npm run art` regenerates the SVG art and icons in `docs/art/` from the key renderer: the key strip,
+compact key strip, demo, favicon and touch icon. It renders the favicon PNGs with Google Chrome at its
+default macOS path, or set `CHROME=/path/to/chrome`. Without Chrome, it still regenerates the SVGs and
+skips PNGs that are already current.
+
+`npm run art:3d` renders the device shots (`hero-device.jpg`, `social.png`, and
+`keys-floating.jpg`) on a Mac with Chrome and the Metal GPU. It downloads three.js r186 from jsDelivr,
+checks the files against pinned sha256 hashes, and caches them in `~/Library/Caches/tally-art`.
+Re-run it whenever key art changes; `test/render3d.test.ts` fails until the committed renders and
+`.source` files are current.
+
+`docs/keys.png` (`npm run sheet -- docs/keys.png`) shows every key in every state. After key-design
+changes, run `npm run icons`, `npm run art`, and `npm run art:3d`. The site is plain HTML/CSS in
+`site/`; `.github/workflows/pages.yml` publishes it with `docs/art/` once the repo is public.
 
 ### Publishing the site
 
@@ -56,7 +63,7 @@ The site deploys from `.github/workflows/pages.yml` once the repo is public. Do 
 1. Make the repo public.
 2. In Settings → Pages, set Source to GitHub Actions.
 3. In Actions → Pages, run the workflow. Making a repo public does not trigger it.
-4. In Settings → General → Social preview, upload `docs/art/social.png`. The repo page does not use the site's link-preview tags.
+4. After the social card changes, in Settings → General → Social preview, upload `docs/art/social.png`. The repo page does not use the site's link-preview tags.
 5. Set the repo's Website to `https://mpalermiti.github.io/tally-for-teams/`.
 
 After that, pushes to `main` that touch `site/` or `docs/art/` redeploy.

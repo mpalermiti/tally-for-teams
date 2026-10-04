@@ -2,7 +2,7 @@
 
 Live Microsoft Teams controls for Stream Deck on Mac.
 
-<p align="center"><img src="docs/art/hero.svg" width="760" alt="A Stream Deck with Tally keys mid-meeting: mic and camera lit with recording dots, timer at 24:17, Leave in red"></p>
+<p align="center"><img src="docs/art/hero-device.jpg" width="760" alt="A white Stream Deck on a desk, running Tally mid-meeting: Mute and Camera lit amber with red recording dots, the timer at 24:17 and Leave in red"></p>
 
 <p align="center"><b><a href="https://github.com/mpalermiti/tally-for-teams/releases/latest/download/Tally.streamDeckPlugin">Download Tally</a></b> · macOS 13+ · Stream Deck 7.1+ · the new Teams desktop app · full state in English Teams</p>
 

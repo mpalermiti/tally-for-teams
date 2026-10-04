@@ -27,7 +27,7 @@ h1 { margin: 0; font: 600 clamp(48px, 7vw, 64px)/1.07 var(--display); letter-spa
 .more::after { content: " ›"; }
 .more:hover { text-decoration: underline; }
 .fineprint { margin: 16px 0 0; color: var(--ink-2); font-size: 14px; letter-spacing: -0.016em; }
-.hero-art { width: min(100%, 980px); margin-top: 56px; }
+.hero-art { width: min(100%, 980px); height: auto; margin-top: 56px; border-radius: 24px; }
 
 main section { max-width: 980px; margin: 0 auto; padding: 80px 24px 0; }
 h2 { margin: 0 0 32px; text-align: center; font: 600 clamp(34px, 5vw, 40px)/1.1 var(--display); letter-spacing: -0.01em; text-wrap: balance; }
@@ -42,7 +42,8 @@ h2 { margin: 0 0 32px; text-align: center; font: 600 clamp(34px, 5vw, 40px)/1.1 
 .grid b { color: var(--ink); }
 .demo img { border-radius: 18px; }
 .caption { margin-top: 20px; font-size: 17px; }
-.keys img { margin-bottom: 32px; }
+.keys-floating { display: block; width: min(100%, 880px); height: auto; margin: 8px auto 40px; border-radius: 24px; }
+.keys picture img { margin-bottom: 32px; }
 .setup ol { display: grid; gap: 20px; max-width: 680px; margin: 0 auto; padding: 0; list-style: none; counter-reset: step; }
 .setup a { text-decoration: underline; }
 .setup li { display: grid; grid-template-columns: 36px 1fr; gap: 16px; align-items: start; font-size: 19px; counter-increment: step; }
