@@ -107,8 +107,8 @@ function createRoomCamera(w, h, shot) {
 		camera.position.set(-116, 70, 330);
 		camera.lookAt(70, 35, -10);
 	} else {
-		camera.position.set(-132, 54, 352);
-		camera.lookAt(0, 8, -34);
+		camera.position.set(-116, 70, 330);
+		camera.lookAt(0, 35, -10);
 	}
 	return camera;
 }
@@ -145,7 +145,6 @@ function buildRoomScene(scene, textures, shot) {
 	scene.add(createWall());
 	scene.add(createCornerBlend());
 	scene.add(createDeskSlab());
-	scene.add(createDeskBackOcclusion());
 	scene.add(createDeskSheen());
 
 	const device = createDevice(textures);
@@ -196,7 +195,7 @@ function createDeskSlab() {
 		new RoundedBoxGeometry(DESK.width, DESK.thickness, DESK.depth, 10, 5),
 		new THREE.MeshStandardMaterial({
 			map: woodTexture(),
-			color: "#D3D3D1",
+			color: "#C9C9C5",
 			roughness: 0.51,
 			envMapIntensity: 0.2,
 		}),
@@ -209,7 +208,7 @@ function createDeskSlab() {
 		new THREE.PlaneGeometry(DESK.width, DESK.depth),
 		new THREE.MeshStandardMaterial({
 			map: woodTexture(),
-			color: "#D3D3D1",
+			color: "#C9C9C5",
 			roughness: 0.5,
 			envMapIntensity: 0.22,
 		}),
@@ -680,9 +679,9 @@ function woodTexture() {
 	canvas.height = 2048;
 	const ctx = canvas.getContext("2d");
 	const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
-	gradient.addColorStop(0, "#D1CCC3");
-	gradient.addColorStop(0.46, "#C8C0B3");
-	gradient.addColorStop(1, "#C3BDB4");
+	gradient.addColorStop(0, "#E0D8CA");
+	gradient.addColorStop(0.46, "#D9CEBD");
+	gradient.addColorStop(1, "#D3C8B7");
 	ctx.fillStyle = gradient;
 	ctx.fillRect(0, 0, canvas.width, canvas.height);
 
@@ -696,7 +695,7 @@ function woodTexture() {
 			const wave = Math.sin(x * 0.0048 + phase) * amp + Math.sin(x * 0.015 + phase * 0.7) * (amp * 0.28);
 			ctx.lineTo(x, y + wave + (rand() - 0.5) * 1.3);
 		}
-		ctx.strokeStyle = rand() > 0.68 ? `rgba(203,181,147,${alpha})` : `rgba(230,220,205,${alpha * 1.15})`;
+		ctx.strokeStyle = rand() > 0.68 ? `rgba(179,155,119,${alpha * 0.86})` : `rgba(244,235,221,${alpha * 0.94})`;
 		ctx.lineWidth = 0.42 + rand() * 0.58;
 		ctx.stroke();
 	}
@@ -706,23 +705,23 @@ function woodTexture() {
 		const height = 2 + rand() * 7;
 		const alpha = 0.022 + rand() * 0.032;
 		const streak = ctx.createLinearGradient(0, y, canvas.width, y + height);
-		streak.addColorStop(0, "rgba(203,181,147,0)");
-		streak.addColorStop(0.18 + rand() * 0.2, `rgba(176,154,121,${alpha})`);
-		streak.addColorStop(0.74 + rand() * 0.18, `rgba(230,220,205,${alpha * 0.7})`);
-		streak.addColorStop(1, "rgba(230,220,205,0)");
+		streak.addColorStop(0, "rgba(198,174,137,0)");
+		streak.addColorStop(0.18 + rand() * 0.2, `rgba(171,148,112,${alpha * 0.82})`);
+		streak.addColorStop(0.74 + rand() * 0.18, `rgba(244,235,221,${alpha * 0.58})`);
+		streak.addColorStop(1, "rgba(244,235,221,0)");
 		ctx.fillStyle = streak;
 		ctx.fillRect(0, y, canvas.width, height);
 	}
 
-	ctx.globalAlpha = 0.024;
+	ctx.globalAlpha = 0.019;
 	for (let i = 0; i < 12000; i++) {
 		const warm = rand() > 0.45;
-		ctx.fillStyle = warm ? "#B49E7A" : "#E7DDD0";
+		ctx.fillStyle = warm ? "#B99D70" : "#EEE3D3";
 		ctx.fillRect(rand() * canvas.width, rand() * canvas.height, 0.8 + rand() * 2.6, 0.55);
 	}
 	ctx.globalAlpha = 1;
 
-	ctx.fillStyle = "rgba(205,205,203,0.12)";
+	ctx.fillStyle = "rgba(218,207,190,0.055)";
 	ctx.fillRect(0, 0, canvas.width, canvas.height);
 
 	const texture = new THREE.CanvasTexture(canvas);
@@ -756,9 +755,9 @@ function wallTexture() {
 
 	const bottomFalloff = ctx.createLinearGradient(0, canvas.height * 0.56, 0, canvas.height);
 	bottomFalloff.addColorStop(0, "rgba(216,208,195,0)");
-	bottomFalloff.addColorStop(0.62, "rgba(216,208,195,0.11)");
-	bottomFalloff.addColorStop(0.86, "rgba(198,188,174,0.2)");
-	bottomFalloff.addColorStop(1, "rgba(181,170,154,0.32)");
+	bottomFalloff.addColorStop(0.62, "rgba(216,208,195,0.06)");
+	bottomFalloff.addColorStop(0.86, "rgba(202,193,178,0.105)");
+	bottomFalloff.addColorStop(1, "rgba(192,181,164,0.16)");
 	ctx.fillStyle = bottomFalloff;
 	ctx.fillRect(0, 0, canvas.width, canvas.height);
 
