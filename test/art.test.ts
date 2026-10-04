@@ -22,13 +22,10 @@ describe("docs/art", () => {
 		expect(readFileSync(new URL(`../docs/art/${name}`, import.meta.url), "utf8")).toBe(svg);
 	});
 
-	it("draws the hero from the real key faces", () => {
-		const hero = buildArt()["hero.svg"];
-		expect(hero).toContain('viewBox="0 0 1400 900"');
-		expect(hero).toContain("radialGradient"); // lit keys (mic, camera, leave)
-		expect(hero).toContain(">24:17<");
-		expect(hero).toContain('data-badge="recording"');
-		expect(hero).not.toContain('id="g"'); // key gradient ids are made unique
+	it("leaves the hero and social card to the 3D renderer", () => {
+		expect(buildArt()).not.toHaveProperty("hero.svg");
+		expect(buildArt()).not.toHaveProperty("social.svg");
+		expect(PNG_RENDERS.map(({ name }) => name)).toEqual(["icon-32.png", "apple-touch-icon.png"]);
 	});
 
 	it("exports the 15 MK.2 key faces as standalone 144px SVGs", () => {

@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { readFileSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
+import { Readable } from "node:stream";
 
-import { SHOTS, imageSize, sourceHash } from "../scripts/render3d";
+import { SHOTS, imageSize, readBody, sourceHash, validateUpload } from "../scripts/render3d";
 import { THREE_FILES, THREE_VERSION, checkSha256 } from "../scripts/render3d/three";
 
 describe("render3d three.js pin", () => {
@@ -40,17 +41,33 @@ describe("render3d shots", () => {
 		expect(sourceHash(shot, { faces: ["<svg/>"] })).not.toBe(sourceHash(shot));
 		expect(sourceHash(shot, { scene: "changed" })).not.toBe(sourceHash(shot));
 	});
+
+	it.each(SHOTS.map((s) => [s.name, s] as const))("%s is current (run npm run art:3d)", (name, shot) => {
+		expect(readFileSync(new URL(`../docs/art/${name}.source`, import.meta.url), "utf8").trim()).toBe(sourceHash(shot));
+		expect(imageSize(readFileSync(new URL(`../docs/art/${name}`, import.meta.url)))).toEqual({
+			width: shot.width,
+			height: shot.height,
+		});
+	});
+
+	it("keeps the hero light enough for the README", () => {
+		expect(statSync(new URL("../docs/art/hero-device.jpg", import.meta.url)).size).toBeLessThan(550_000);
+	});
 });
 
 describe("render3d image sizes", () => {
-	it("reads PNG dimensions from the IHDR header", () => {
+	function pngWithSize(width: number, height: number): Buffer {
 		const png = Buffer.alloc(33);
 		Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).copy(png);
 		png.writeUInt32BE(13, 8);
 		Buffer.from("IHDR").copy(png, 12);
-		png.writeUInt32BE(1280, 16);
-		png.writeUInt32BE(640, 20);
-		expect(imageSize(png)).toEqual({ width: 1280, height: 640 });
+		png.writeUInt32BE(width, 16);
+		png.writeUInt32BE(height, 20);
+		return png;
+	}
+
+	it("reads PNG dimensions from the IHDR header", () => {
+		expect(imageSize(pngWithSize(1280, 640))).toEqual({ width: 1280, height: 640 });
 	});
 
 	it("rejects PNG-looking data without an IHDR chunk", () => {
@@ -73,6 +90,21 @@ describe("render3d image sizes", () => {
 
 	it("throws for unsupported image data", () => {
 		expect(() => imageSize(Buffer.from("nope"))).toThrow(/image size/i);
+	});
+
+	it("validates uploaded renders in memory before writing", () => {
+		expect(() => validateUpload(SHOTS[1], pngWithSize(1280, 640))).not.toThrow();
+		expect(() => validateUpload(SHOTS[1], pngWithSize(1279, 640))).toThrow(/expected 1280×640/);
+	});
+});
+
+describe("render3d request bodies", () => {
+	it("reads a body within the configured limit", async () => {
+		await expect(readBody(Readable.from([Buffer.from("ok")]), 2)).resolves.toEqual(Buffer.from("ok"));
+	});
+
+	it("rejects a body that exceeds the configured limit", async () => {
+		await expect(readBody(Readable.from([Buffer.from("abc"), Buffer.from("d")]), 3)).rejects.toThrow(/too large/i);
 	});
 });
 

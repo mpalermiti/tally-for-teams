@@ -1,15 +1,11 @@
 /**
  * Renders the README and site art from the plugin's own key renderer, so pictures of keys always
  * match the real thing:
- *   docs/art/hero.svg          a Stream Deck MK.2 mid-meeting
  *   docs/art/demo.svg          animated: press Mute, raise a hand in Teams, press Share
  *   docs/art/keys.svg          the ten keys, labelled
  *   docs/art/keys-compact.svg  the ten keys in three phone-sized rows
  *   docs/art/icon.svg          favicon (the plugin mark)
  *   docs/art/apple-touch-icon.svg full-bleed opaque iOS touch icon
- *   docs/art/social.svg        1280×640 link preview
- *   docs/art/social.png        Chrome-rendered link preview PNG (browser/SF Pro text)
- *   docs/art/social.png.source sha256 of the social.svg markup and render settings
  *   docs/art/icon-32.png       Chrome-rendered 32×32 favicon PNG from icon.svg
  *   docs/art/apple-touch-icon.png Chrome-rendered 180×180 touch icon PNG from apple-touch-icon.svg
  * Run `npm run art` after changing the key design; test/art.test.ts fails if these are stale.
@@ -43,7 +39,6 @@ const inMeeting = (state: Partial<MeetingState> = {}): Snapshot => ({
 
 const FONT = "-apple-system, BlinkMacSystemFont, 'Helvetica Neue', Helvetica, Arial, sans-serif";
 const INK = "#1D1D1F";
-const SOFT_INK = "#6E6E73";
 const PAPER = "#F5F5F7";
 const AMBER = "#F7B93E";
 const MARK_GLOW_INNER = "#FFD989";
@@ -180,20 +175,6 @@ const svgDoc = (width: number, height: number, label: string, body: string) =>
 
 const card = (width: number, height: number) => `<rect width="${width}" height="${height}" rx="32" fill="${PAPER}"/>`;
 
-/** The hero: an MK.2 mid-meeting, mic and camera live, recording dot, timer and Leave red. */
-export function heroSvg(): string {
-	const ids = new Ids();
-	const W = 1400;
-	const H = 900;
-	const body = device((_, slot) => face(slot, MID_MEETING, ids), ids);
-	return svgDoc(
-		W,
-		H,
-		"A Stream Deck with Tally keys mid-meeting: mic and camera lit with recording dots, timer at 24:17, Leave in red",
-		`<defs>${DEVICE_DEFS}</defs>${card(W, H)}<g transform="translate(${(W - DEVICE_W) / 2} ${(H - DEVICE_H) / 2 - 10})">${body}</g>`,
-	);
-}
-
 const KEY_STRIP_KEYS: [Slot, string][] = [
 	[{ kind: "mute" }, "Mute"],
 	[{ kind: "camera" }, "Camera"],
@@ -262,26 +243,6 @@ export function keysCompactSvg(): string {
 		H,
 		"The ten Tally keys: Mute, Camera, Raise hand, Share, Chat, React, People, Blur, Meeting timer and Leave",
 		`<defs><filter id="keyStripShadow" x="-12%" y="-8%" width="124%" height="126%"><feGaussianBlur stdDeviation="4"/></filter></defs>${body}`,
-	);
-}
-
-/** The 1280×640 link preview: name and one line beside the device. */
-export function socialSvg(): string {
-	const ids = new Ids();
-	const snapshot = inMeeting({ isMuted: false, isVideoOn: true, isRecording: true, meetingElapsedSeconds: TIMER_SECONDS });
-	const W = 1280;
-	const H = 640;
-	const scale = 0.55;
-	const body = device((_, slot) => face(slot, snapshot, ids), ids);
-	return svgDoc(
-		W,
-		H,
-		"Tally for Teams",
-		`<defs>${DEVICE_DEFS}</defs><rect width="${W}" height="${H}" fill="${PAPER}"/>` +
-			`<text x="88" y="300" font-family="${FONT}" font-size="64" font-weight="700" fill="${INK}">Tally for Teams</text>` +
-			`<text x="88" y="360" font-family="${FONT}" font-size="28" fill="${SOFT_INK}">Live Teams controls</text>` +
-			`<text x="88" y="396" font-family="${FONT}" font-size="28" fill="${SOFT_INK}">for Stream Deck on Mac.</text>` +
-			`<g transform="translate(${W - DEVICE_W * scale - 64} ${(H - DEVICE_H * scale) / 2}) scale(${scale})">${body}</g>`,
 	);
 }
 
@@ -450,12 +411,10 @@ export function demoSvg(): string {
 /** Every generated SVG, by file name under docs/art/. */
 export function buildArt(): Record<string, string> {
 	return {
-		"hero.svg": heroSvg(),
 		"keys.svg": keysSvg(),
 		"keys-compact.svg": keysCompactSvg(),
 		"icon.svg": markSvg(),
 		"apple-touch-icon.svg": touchIconSvg(),
-		"social.svg": socialSvg(),
 		"demo.svg": demoSvg(),
 	};
 }
@@ -463,7 +422,6 @@ export function buildArt(): Record<string, string> {
 const PNG_BACKGROUND_COLOR = "00000000";
 
 export const PNG_RENDERS = [
-	{ name: "social.png", source: "social.svg", width: 1280, height: 640, fit: false, backgroundColor: PNG_BACKGROUND_COLOR },
 	{ name: "icon-32.png", source: "icon.svg", width: 32, height: 32, fit: true, backgroundColor: PNG_BACKGROUND_COLOR },
 	{ name: "apple-touch-icon.png", source: "apple-touch-icon.svg", width: 180, height: 180, fit: true, backgroundColor: PNG_BACKGROUND_COLOR },
 ] as const satisfies readonly {
