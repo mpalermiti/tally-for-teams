@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { SHOTS, sourceHash } from "../scripts/render3d";
+import { SHOTS, imageSize, sourceHash } from "../scripts/render3d";
 import { THREE_FILES, THREE_VERSION, checkSha256 } from "../scripts/render3d/three";
 
 describe("render3d three.js pin", () => {
@@ -38,5 +38,29 @@ describe("render3d shots", () => {
 		expect(sourceHash(shot)).toBe(sourceHash(shot));
 		expect(sourceHash(shot, { faces: ["<svg/>"] })).not.toBe(sourceHash(shot));
 		expect(sourceHash(shot, { scene: "changed" })).not.toBe(sourceHash(shot));
+	});
+});
+
+describe("render3d image sizes", () => {
+	it("reads PNG dimensions from the IHDR header", () => {
+		const png = Buffer.alloc(24);
+		Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).copy(png);
+		png.writeUInt32BE(1280, 16);
+		png.writeUInt32BE(640, 20);
+		expect(imageSize(png)).toEqual({ width: 1280, height: 640 });
+	});
+
+	it("reads JPEG dimensions from the first SOF segment", () => {
+		const jpg = Buffer.concat([
+			Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10]),
+			Buffer.alloc(14),
+			Buffer.from([0xff, 0xc0, 0x00, 0x11, 0x08, 0x05, 0x46, 0x09, 0x60]),
+			Buffer.alloc(10),
+		]);
+		expect(imageSize(jpg)).toEqual({ width: 2400, height: 1350 });
+	});
+
+	it("throws for unsupported image data", () => {
+		expect(() => imageSize(Buffer.from("nope"))).toThrow(/image size/i);
 	});
 });
