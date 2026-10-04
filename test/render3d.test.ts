@@ -44,11 +44,21 @@ describe("render3d shots", () => {
 
 describe("render3d image sizes", () => {
 	it("reads PNG dimensions from the IHDR header", () => {
+		const png = Buffer.alloc(33);
+		Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).copy(png);
+		png.writeUInt32BE(13, 8);
+		Buffer.from("IHDR").copy(png, 12);
+		png.writeUInt32BE(1280, 16);
+		png.writeUInt32BE(640, 20);
+		expect(imageSize(png)).toEqual({ width: 1280, height: 640 });
+	});
+
+	it("rejects PNG-looking data without an IHDR chunk", () => {
 		const png = Buffer.alloc(24);
 		Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).copy(png);
 		png.writeUInt32BE(1280, 16);
 		png.writeUInt32BE(640, 20);
-		expect(imageSize(png)).toEqual({ width: 1280, height: 640 });
+		expect(() => imageSize(png)).toThrow(/IHDR/);
 	});
 
 	it("reads JPEG dimensions from the first SOF segment", () => {

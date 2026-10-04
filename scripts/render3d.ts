@@ -54,7 +54,14 @@ const JPEG_SOF_MARKERS = new Set([0xc0, 0xc1, 0xc2]);
 const DEFAULT_CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 
 export function imageSize(buf: Buffer): { width: number; height: number } {
-	if (buf.length >= 24 && buf.subarray(0, PNG_SIGNATURE.length).equals(PNG_SIGNATURE)) {
+	if (buf.length >= PNG_SIGNATURE.length && buf.subarray(0, PNG_SIGNATURE.length).equals(PNG_SIGNATURE)) {
+		if (
+			buf.length < 33 ||
+			buf.readUInt32BE(8) !== 13 ||
+			buf.subarray(12, 16).toString("ascii") !== "IHDR"
+		) {
+			throw new Error("Couldn't read image size: invalid PNG IHDR chunk");
+		}
 		return { width: buf.readUInt32BE(16), height: buf.readUInt32BE(20) };
 	}
 
