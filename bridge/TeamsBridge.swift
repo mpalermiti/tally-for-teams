@@ -206,6 +206,7 @@ struct WindowScan {
 	let markers: [String]
 	let markerControlIDs: [String]
 	let indicatorContainers: [String: AXUIElement]
+	let hasWebArea: Bool
 }
 
 func scanWindow(
@@ -225,10 +226,12 @@ func scanWindow(
 	var indicatorRanks: [String: Int] = [:]
 	var stack: [(element: AXUIElement, insideMarkerContainer: Bool)] = [(root, false)]
 	var visited = 0
+	var hasWebArea = false
 	while let current = stack.popLast(), visited < maxNodes {
 		visited += 1
 		let element = current.element
 		let role = string(element, kAXRoleAttribute)
+		if role == "AXWebArea" { hasWebArea = true }
 		var insideMarkerContainer = current.insideMarkerContainer
 		if let role, markerContainerRoles.contains(role), let id = domIdentifier(element) {
 			if markerSet.contains(id) {
@@ -254,7 +257,8 @@ func scanWindow(
 		found: found,
 		markers: markers.filter { seenMarkers.contains($0) },
 		markerControlIDs: markerControlIDs,
-		indicatorContainers: indicatorContainers
+		indicatorContainers: indicatorContainers,
+		hasWebArea: hasWebArea
 	)
 }
 
@@ -303,6 +307,22 @@ func canPress(_ element: AXUIElement) -> Bool {
 /// If something turns Teams' accessibility mode off while we run (VoiceOver quitting, another
 /// tool, a probe), Teams keeps showing its buttons but drops their press action, so presses
 /// silently do nothing. Turn the mode back on, at most every few seconds.
+/// Teams ignores the accessibility switch while it's still launching, so a single attempt when
+/// Teams first appears can be lost and every key then finds nothing. While no window shows web
+/// content, keep asking (at most every 2 s); setting it again when it's already on does nothing.
+var webTreeBuilt = true
+var lastTreeBuildRequest = Date.distantPast
+var loggedUnbuiltTreeFor: pid_t = 0
+func requestTreeBuild(_ app: AXUIElement, force: Bool = false) {
+	guard force || Date().timeIntervalSince(lastTreeBuildRequest) > 2 else { return }
+	lastTreeBuildRequest = Date()
+	enableTree(app)
+	if loggedUnbuiltTreeFor != appPID {
+		loggedUnbuiltTreeFor = appPID
+		log("Teams' web content wasn't exposed yet; turned its accessibility mode on")
+	}
+}
+
 var lastTreeRepair = Date.distantPast
 func repairTreeIfNeeded(_ element: AXUIElement) {
 	guard !canPress(element), let app = axApp, Date().timeIntervalSince(lastTreeRepair) > 5 else { return }
@@ -335,8 +355,10 @@ func discover(_ app: AXUIElement) {
 	var bestIndicatorContainers: [String: AXUIElement] = [:]
 	var bestWindow: AXUIElement?
 	var bestScore = -1
+	var sawWebArea = false
 	for window in windows(of: app) {
 		let scan = scanWindow(window, wanted: wanted, markers: markerIDs, indicatorContainerIDs: indicatorContainerIDs)
+		if scan.hasWebArea { sawWebArea = true }
 		let hasAnchor = scan.found[anchorID] != nil
 		let score = scan.found.count + (hasAnchor ? 1000 : 0) + (!hasAnchor && !scan.markers.isEmpty ? 500 : 0)
 		if score > bestScore {
@@ -353,6 +375,8 @@ func discover(_ app: AXUIElement) {
 	meetingMarkers = bestMarkers
 	meetingMarkerControlIDs = bestMarkerControlIDs
 	meetingWindow = bestWindow
+	webTreeBuilt = sawWebArea
+	if !sawWebArea { requestTreeBuild(app) }
 }
 
 /// The cached buttons that are still on screen.
@@ -541,6 +565,14 @@ func element(for id: String) -> AXUIElement? {
 	if let cached = cache[id], label(cached) != nil { return cached }
 	guard let app = axApp else { return nil }
 	discover(app)
+	if cache[id] == nil, !webTreeBuilt {
+		// A key pressed before Teams exposed its buttons: switch the tree on and give it a second.
+		requestTreeBuild(app, force: true)
+		for _ in 0..<4 where cache[id] == nil {
+			Thread.sleep(forTimeInterval: 0.25)
+			discover(app)
+		}
+	}
 	return cache[id]
 }
 
