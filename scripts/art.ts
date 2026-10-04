@@ -56,6 +56,7 @@ const PAD = 58;
 const DEVICE_W = PAD * 2 + 5 * KEY + 4 * GAP;
 const DEVICE_H = PAD * 2 + 3 * KEY + 2 * GAP;
 const TIMER_SECONDS = 24 * 60 + 17;
+const MID_MEETING = inMeeting({ isMuted: false, isVideoOn: true, isRecording: true, meetingElapsedSeconds: TIMER_SECONDS });
 
 type Slot = { kind: KeyKind; reaction?: Reaction } | null;
 
@@ -107,6 +108,32 @@ function face(slot: Slot, snapshot: Snapshot, ids: Ids): string {
 	return innerFace(keySvg(visualFor(slot.kind, snapshot, { reaction: slot.reaction })), ids);
 }
 
+const standalone = (inner: string) =>
+	`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${KEY} ${KEY}" width="${KEY}" height="${KEY}">${inner}</svg>`;
+
+/** The bundled MK.2 layout mid-meeting, one standalone SVG per key (row-major). Screen textures for the 3D renders. */
+export function deviceKeyFaces(): string[] {
+	return LAYOUT.map((slot) => standalone(face(slot, MID_MEETING, new Ids())));
+}
+
+/** The floating keys in the exploded shot: Mute live (recorded), Camera on, hand up, timer, Leave. */
+export function floatingKeyFaces(): Record<"mute" | "camera" | "hand" | "timer" | "leave", string> {
+	const raised = inMeeting({
+		isMuted: false,
+		isVideoOn: true,
+		isRecording: true,
+		meetingElapsedSeconds: TIMER_SECONDS,
+		isHandRaised: true,
+	});
+	return {
+		mute: standalone(face({ kind: "mute" }, MID_MEETING, new Ids())),
+		camera: standalone(face({ kind: "camera" }, MID_MEETING, new Ids())),
+		hand: standalone(face({ kind: "hand" }, raised, new Ids())),
+		timer: standalone(face({ kind: "timer" }, MID_MEETING, new Ids())),
+		leave: standalone(face({ kind: "leave" }, MID_MEETING, new Ids())),
+	};
+}
+
 /** A key with rounded corners; `inner` may stack several faces. */
 function keyCap(inner: string, ids: Ids, options: { hairline?: boolean; shadow?: boolean } = {}): string {
 	const clip = ids.next("c");
@@ -156,10 +183,9 @@ const card = (width: number, height: number) => `<rect width="${width}" height="
 /** The hero: an MK.2 mid-meeting, mic and camera live, recording dot, timer and Leave red. */
 export function heroSvg(): string {
 	const ids = new Ids();
-	const snapshot = inMeeting({ isMuted: false, isVideoOn: true, isRecording: true, meetingElapsedSeconds: TIMER_SECONDS });
 	const W = 1400;
 	const H = 900;
-	const body = device((_, slot) => face(slot, snapshot, ids), ids);
+	const body = device((_, slot) => face(slot, MID_MEETING, ids), ids);
 	return svgDoc(
 		W,
 		H,
