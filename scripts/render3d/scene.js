@@ -28,6 +28,13 @@ const GRID = {
 	height: KEY.size * 3 + KEY.gap * 2,
 	offsetY: -7.2 * MM,
 };
+const DESK = {
+	width: 2800,
+	depth: 900,
+	thickness: 28,
+	backZ: -600,
+	frontZ: 300,
+};
 
 try {
 	const params = new URLSearchParams(location.search);
@@ -100,8 +107,8 @@ function createRoomCamera(w, h, shot) {
 		camera.position.set(-116, 70, 330);
 		camera.lookAt(70, 35, -10);
 	} else {
-		camera.position.set(-136, 76, 365);
-		camera.lookAt(0, 35, -18);
+		camera.position.set(-132, 54, 352);
+		camera.lookAt(0, 8, -34);
 	}
 	return camera;
 }
@@ -119,8 +126,8 @@ function buildRoomScene(scene, textures, shot) {
 	root.position.z = shot === "social" ? 6 : 0;
 	scene.add(root);
 
-	scene.add(new THREE.HemisphereLight("#FFFFFF", "#D8D1C7", 0.72));
-	const light = new THREE.DirectionalLight("#FFF7EC", 3.35);
+	scene.add(new THREE.HemisphereLight("#FFFFFF", "#DAD7D1", 0.76));
+	const light = new THREE.DirectionalLight("#FFFFFF", 3.18);
 	light.position.set(-150, 205, 155);
 	light.target.position.set(4, 32, -14);
 	light.castShadow = true;
@@ -135,8 +142,11 @@ function buildRoomScene(scene, textures, shot) {
 	light.shadow.camera.far = 405;
 	scene.add(light, light.target);
 
-	scene.add(createDeskSlab());
 	scene.add(createWall());
+	scene.add(createCornerBlend());
+	scene.add(createDeskSlab());
+	scene.add(createDeskBackOcclusion());
+	scene.add(createDeskSheen());
 
 	const device = createDevice(textures);
 	device.position.y = 41.2;
@@ -181,43 +191,44 @@ function buildRoomScene(scene, textures, shot) {
 
 function createDeskSlab() {
 	const group = new THREE.Group();
+	const centerZ = (DESK.frontZ + DESK.backZ) / 2;
 	const body = new THREE.Mesh(
-		new RoundedBoxGeometry(1600, 28, 800, 8, 5),
+		new RoundedBoxGeometry(DESK.width, DESK.thickness, DESK.depth, 10, 5),
 		new THREE.MeshStandardMaterial({
 			map: woodTexture(),
-			color: "#EFE4D1",
-			roughness: 0.55,
-			envMapIntensity: 0.22,
+			color: "#D3D3D1",
+			roughness: 0.51,
+			envMapIntensity: 0.2,
 		}),
 	);
-	body.position.set(0, -14, -200);
+	body.position.set(0, -DESK.thickness / 2, centerZ);
 	body.receiveShadow = true;
 	group.add(body);
 
 	const top = new THREE.Mesh(
-		new THREE.PlaneGeometry(1600, 800),
+		new THREE.PlaneGeometry(DESK.width, DESK.depth),
 		new THREE.MeshStandardMaterial({
 			map: woodTexture(),
-			color: "#F4E8D6",
-			roughness: 0.55,
-			envMapIntensity: 0.16,
+			color: "#D3D3D1",
+			roughness: 0.5,
+			envMapIntensity: 0.22,
 		}),
 	);
 	top.rotation.x = -Math.PI / 2;
-	top.position.set(0, 0.035, -200);
+	top.position.set(0, 0.035, centerZ);
 	top.receiveShadow = true;
 	group.add(top);
 
 	const frontEdge = new THREE.Mesh(
-		new THREE.PlaneGeometry(1600, 28),
+		new THREE.PlaneGeometry(DESK.width, DESK.thickness),
 		new THREE.MeshStandardMaterial({
 			map: woodTexture(),
-			color: "#D8BF97",
-			roughness: 0.58,
-			envMapIntensity: 0.12,
+			color: "#96928A",
+			roughness: 0.54,
+			envMapIntensity: 0.14,
 		}),
 	);
-	frontEdge.position.set(0, -14, 200.6);
+	frontEdge.position.set(0, -DESK.thickness / 2, DESK.frontZ + 0.35);
 	frontEdge.rotation.x = 0;
 	frontEdge.receiveShadow = true;
 	group.add(frontEdge);
@@ -226,7 +237,7 @@ function createDeskSlab() {
 
 function createWall() {
 	const wall = new THREE.Mesh(
-		new THREE.PlaneGeometry(1900, 980),
+		new THREE.PlaneGeometry(5200, 1800),
 		new THREE.MeshStandardMaterial({
 			map: wallTexture(),
 			color: "#FFFFFF",
@@ -234,9 +245,58 @@ function createWall() {
 			envMapIntensity: 0.08,
 		}),
 	);
-	wall.position.set(0, 365, -600);
+	wall.position.set(0, 720, DESK.backZ);
 	wall.receiveShadow = true;
 	return wall;
+}
+
+function createCornerBlend() {
+	const blend = new THREE.Mesh(
+		new THREE.PlaneGeometry(DESK.width, 220),
+		new THREE.MeshBasicMaterial({
+			map: cornerBlendTexture(),
+			transparent: true,
+			depthWrite: false,
+			toneMapped: false,
+		}),
+	);
+	blend.rotation.x = Math.PI / 4;
+	blend.position.set(0, 78, DESK.backZ + 78);
+	blend.renderOrder = 3;
+	return blend;
+}
+
+function createDeskBackOcclusion() {
+	const shadow = new THREE.Mesh(
+		new THREE.PlaneGeometry(DESK.width, 260),
+		new THREE.MeshBasicMaterial({
+			map: deskBackOcclusionTexture(),
+			transparent: true,
+			depthWrite: false,
+			toneMapped: false,
+		}),
+	);
+	shadow.rotation.x = -Math.PI / 2;
+	shadow.position.set(0, 0.08, DESK.backZ + 130);
+	shadow.renderOrder = 1;
+	return shadow;
+}
+
+function createDeskSheen() {
+	const sheen = new THREE.Mesh(
+		new THREE.PlaneGeometry(DESK.width * 0.82, 420),
+		new THREE.MeshBasicMaterial({
+			map: deskSheenTexture(),
+			transparent: true,
+			depthWrite: false,
+			toneMapped: false,
+		}),
+	);
+	sheen.rotation.x = -Math.PI / 2;
+	sheen.rotation.z = THREE.MathUtils.degToRad(-1.5);
+	sheen.position.set(110, 0.095, -86);
+	sheen.renderOrder = 2;
+	return sheen;
 }
 
 function createDevice(textures) {
@@ -616,56 +676,60 @@ function mulberry32(seed) {
 function woodTexture() {
 	const rand = mulberry32(0x54414c4c);
 	const canvas = document.createElement("canvas");
-	canvas.width = 3072;
-	canvas.height = 1024;
+	canvas.width = 4096;
+	canvas.height = 2048;
 	const ctx = canvas.getContext("2d");
 	const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
-	gradient.addColorStop(0, "#E4D0AC");
-	gradient.addColorStop(0.48, "#E2CBA6");
-	gradient.addColorStop(1, "#D8BF97");
+	gradient.addColorStop(0, "#D1CCC3");
+	gradient.addColorStop(0.46, "#C8C0B3");
+	gradient.addColorStop(1, "#C3BDB4");
 	ctx.fillStyle = gradient;
 	ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-	ctx.globalAlpha = 0.13;
-	for (let i = 0; i < 230; i++) {
-		const y = rand() * canvas.height;
-		const amp = 1.4 + rand() * 4.5;
+	for (let y = -18; y < canvas.height + 18; y += 3 + rand() * 5.2) {
+		const amp = 1.1 + rand() * 3.6;
+		const alpha = 0.035 + rand() * 0.06;
 		ctx.beginPath();
 		ctx.moveTo(0, y);
 		const phase = rand() * 6.28;
-		for (let x = 0; x <= canvas.width; x += 96) {
-			ctx.lineTo(x, y + Math.sin(x * 0.006 + phase) * amp + (rand() - 0.5) * 2);
+		for (let x = 0; x <= canvas.width; x += 72) {
+			const wave = Math.sin(x * 0.0048 + phase) * amp + Math.sin(x * 0.015 + phase * 0.7) * (amp * 0.28);
+			ctx.lineTo(x, y + wave + (rand() - 0.5) * 1.3);
 		}
-		ctx.strokeStyle = rand() > 0.58 ? "#A98254" : "#F6E8CF";
-		ctx.lineWidth = 0.35 + rand() * 1.1;
+		ctx.strokeStyle = rand() > 0.68 ? `rgba(203,181,147,${alpha})` : `rgba(230,220,205,${alpha * 1.15})`;
+		ctx.lineWidth = 0.42 + rand() * 0.58;
 		ctx.stroke();
 	}
 
-	ctx.globalAlpha = 0.065;
-	for (let i = 0; i < 6200; i++) {
-		const v = Math.floor(178 + rand() * 48);
-		ctx.fillStyle = `rgb(${v},${Math.floor(v * 0.87)},${Math.floor(v * 0.66)})`;
-		ctx.fillRect(rand() * canvas.width, rand() * canvas.height, 1.2 + rand() * 2.8, 0.9);
+	for (let i = 0; i < 42; i++) {
+		const y = rand() * canvas.height;
+		const height = 2 + rand() * 7;
+		const alpha = 0.022 + rand() * 0.032;
+		const streak = ctx.createLinearGradient(0, y, canvas.width, y + height);
+		streak.addColorStop(0, "rgba(203,181,147,0)");
+		streak.addColorStop(0.18 + rand() * 0.2, `rgba(176,154,121,${alpha})`);
+		streak.addColorStop(0.74 + rand() * 0.18, `rgba(230,220,205,${alpha * 0.7})`);
+		streak.addColorStop(1, "rgba(230,220,205,0)");
+		ctx.fillStyle = streak;
+		ctx.fillRect(0, y, canvas.width, height);
 	}
 
-	ctx.globalAlpha = 0.035;
-	for (let i = 0; i < 44; i++) {
-		const y = rand() * canvas.height;
-		const h = 8 + rand() * 34;
-		const streak = ctx.createLinearGradient(0, y, canvas.width, y + h);
-		streak.addColorStop(0, "rgba(255,255,255,0)");
-		streak.addColorStop(0.18 + rand() * 0.18, "rgba(255,255,255,0.8)");
-		streak.addColorStop(1, "rgba(145,105,65,0)");
-		ctx.fillStyle = streak;
-		ctx.fillRect(0, y, canvas.width, h);
+	ctx.globalAlpha = 0.024;
+	for (let i = 0; i < 12000; i++) {
+		const warm = rand() > 0.45;
+		ctx.fillStyle = warm ? "#B49E7A" : "#E7DDD0";
+		ctx.fillRect(rand() * canvas.width, rand() * canvas.height, 0.8 + rand() * 2.6, 0.55);
 	}
 	ctx.globalAlpha = 1;
+
+	ctx.fillStyle = "rgba(205,205,203,0.12)";
+	ctx.fillRect(0, 0, canvas.width, canvas.height);
 
 	const texture = new THREE.CanvasTexture(canvas);
 	texture.colorSpace = THREE.SRGBColorSpace;
 	texture.wrapS = THREE.RepeatWrapping;
 	texture.wrapT = THREE.RepeatWrapping;
-	texture.repeat.set(1.2, 1);
+	texture.repeat.set(2.1, 1.15);
 	texture.anisotropy = 16;
 	return texture;
 }
@@ -673,29 +737,41 @@ function woodTexture() {
 function wallTexture() {
 	const rand = mulberry32(0x20261003);
 	const canvas = document.createElement("canvas");
-	canvas.width = 1600;
-	canvas.height = 1000;
+	canvas.width = 2400;
+	canvas.height = 1600;
 	const ctx = canvas.getContext("2d");
-	ctx.fillStyle = WALL;
+	const base = ctx.createLinearGradient(0, 0, 0, canvas.height);
+	base.addColorStop(0, "#F7F5F0");
+	base.addColorStop(0.58, WALL);
+	base.addColorStop(1, "#EAE4DB");
+	ctx.fillStyle = base;
 	ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-	const light = ctx.createLinearGradient(canvas.width * 0.56, 0, canvas.width, canvas.height);
-	light.addColorStop(0, "rgba(255,255,255,0.3)");
-	light.addColorStop(0.5, "rgba(255,255,255,0.08)");
-	light.addColorStop(1, "rgba(213,205,194,0.05)");
+	const light = ctx.createRadialGradient(canvas.width * 0.58, canvas.height * 0.1, 0, canvas.width * 0.58, canvas.height * 0.1, canvas.width * 0.72);
+	light.addColorStop(0, "rgba(255,255,255,0.44)");
+	light.addColorStop(0.48, "rgba(255,255,255,0.18)");
+	light.addColorStop(1, "rgba(255,255,255,0)");
 	ctx.fillStyle = light;
 	ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-	const bottomFalloff = ctx.createLinearGradient(0, canvas.height * 0.62, 0, canvas.height);
+	const bottomFalloff = ctx.createLinearGradient(0, canvas.height * 0.56, 0, canvas.height);
 	bottomFalloff.addColorStop(0, "rgba(216,208,195,0)");
-	bottomFalloff.addColorStop(0.68, "rgba(216,208,195,0.08)");
-	bottomFalloff.addColorStop(1, "rgba(196,185,169,0.18)");
+	bottomFalloff.addColorStop(0.62, "rgba(216,208,195,0.11)");
+	bottomFalloff.addColorStop(0.86, "rgba(198,188,174,0.2)");
+	bottomFalloff.addColorStop(1, "rgba(181,170,154,0.32)");
 	ctx.fillStyle = bottomFalloff;
+	ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+	const edgeFalloff = ctx.createRadialGradient(canvas.width * 0.5, canvas.height * 0.46, canvas.width * 0.12, canvas.width * 0.5, canvas.height * 0.52, canvas.width * 0.64);
+	edgeFalloff.addColorStop(0, "rgba(0,0,0,0)");
+	edgeFalloff.addColorStop(0.72, "rgba(0,0,0,0)");
+	edgeFalloff.addColorStop(1, "rgba(185,176,162,0.1)");
+	ctx.fillStyle = edgeFalloff;
 	ctx.fillRect(0, 0, canvas.width, canvas.height);
 
 	ctx.save();
 	ctx.filter = "blur(44px)";
-	ctx.globalAlpha = 0.04;
+	ctx.globalAlpha = 0.035;
 	ctx.translate(canvas.width * 0.68, -120);
 	ctx.rotate(THREE.MathUtils.degToRad(9));
 	for (let i = 0; i < 3; i++) {
@@ -714,6 +790,66 @@ function wallTexture() {
 
 	const texture = new THREE.CanvasTexture(canvas);
 	texture.colorSpace = THREE.SRGBColorSpace;
+	texture.anisotropy = 8;
+	return texture;
+}
+
+function deskBackOcclusionTexture() {
+	const canvas = document.createElement("canvas");
+	canvas.width = 2048;
+	canvas.height = 256;
+	const ctx = canvas.getContext("2d");
+	const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+	gradient.addColorStop(0, "rgba(78,68,56,0.065)");
+	gradient.addColorStop(0.24, "rgba(102,88,70,0.04)");
+	gradient.addColorStop(0.72, "rgba(132,116,92,0.014)");
+	gradient.addColorStop(1, "rgba(132,112,86,0)");
+	ctx.fillStyle = gradient;
+	ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+	const texture = new THREE.CanvasTexture(canvas);
+	texture.colorSpace = THREE.SRGBColorSpace;
+	texture.wrapS = THREE.RepeatWrapping;
+	texture.anisotropy = 8;
+	return texture;
+}
+
+function deskSheenTexture() {
+	const canvas = document.createElement("canvas");
+	canvas.width = 2048;
+	canvas.height = 512;
+	const ctx = canvas.getContext("2d");
+	const sheen = ctx.createRadialGradient(canvas.width * 0.44, canvas.height * 0.25, 0, canvas.width * 0.44, canvas.height * 0.25, canvas.width * 0.54);
+	sheen.addColorStop(0, "rgba(255,255,255,0.038)");
+	sheen.addColorStop(0.34, "rgba(255,255,255,0.018)");
+	sheen.addColorStop(0.75, "rgba(255,255,255,0.006)");
+	sheen.addColorStop(1, "rgba(255,255,255,0)");
+	ctx.fillStyle = sheen;
+	ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+	const texture = new THREE.CanvasTexture(canvas);
+	texture.colorSpace = THREE.SRGBColorSpace;
+	texture.anisotropy = 8;
+	return texture;
+}
+
+function cornerBlendTexture() {
+	const canvas = document.createElement("canvas");
+	canvas.width = 2048;
+	canvas.height = 384;
+	const ctx = canvas.getContext("2d");
+	const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+	gradient.addColorStop(0, "rgba(235,228,217,0)");
+	gradient.addColorStop(0.22, "rgba(218,207,190,0.04)");
+	gradient.addColorStop(0.5, "rgba(241,236,226,0.065)");
+	gradient.addColorStop(0.82, "rgba(249,247,241,0.032)");
+	gradient.addColorStop(1, "rgba(249,247,241,0)");
+	ctx.fillStyle = gradient;
+	ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+	const texture = new THREE.CanvasTexture(canvas);
+	texture.colorSpace = THREE.SRGBColorSpace;
+	texture.wrapS = THREE.RepeatWrapping;
 	texture.anisotropy = 8;
 	return texture;
 }
