@@ -57,6 +57,17 @@ describe("snapshotFrom", () => {
 		expect(live.state).toMatchObject({ isMuted: false, isVideoOn: true });
 	});
 
+	it("reads Teams' live recording indicator image (Teams 26267)", () => {
+		const live = [
+			{ id: "call-duration-custom", role: "AXGroup", label: "Elapsed time 00:37" },
+			{ id: "calling-agents-control-ubar-indicator", role: "AXButton", label: "AI is on in the meeting" },
+			{ id: "recording-indicator-custom", role: "AXImage", label: "Recording and transcription started by Michael Palermiti." },
+			{ id: "e2ee-status", role: "AXButton", label: "Encryption status" },
+		];
+		expect(snapshotFrom(status(toolbar, { indicators: live })).state.isRecording).toBe(true);
+		expect(snapshotFrom(status(toolbar, { indicators: live.filter((i) => i.role !== "AXImage") })).state.isRecording).toBe(false);
+	});
+
 	it("reads recording only from positive indicator labels or labeled recording ids", () => {
 		for (const label of ["Recording", "Recording and transcribing", "This meeting is being recorded", "Recording has started", "Transcription started"]) {
 			expect(snapshotFrom(status(toolbar, { indicators: [{ role: "AXStaticText", label }] })).state.isRecording).toBe(true);

@@ -130,7 +130,8 @@ let controlRoles: Set<String> = [
 	"AXButton", "AXCheckBox", "AXRadioButton", "AXMenuButton", "AXPopUpButton", "AXMenuItem", "AXToggle", "AXSwitch",
 ]
 let markerContainerRoles: Set<String> = ["AXToolbar", "AXGroup"]
-let indicatorRoles: Set<String> = ["AXButton", "AXGroup", "AXTimeGroup", "AXStaticText"]
+// Teams shows recording as an image (#recording-indicator-custom), so images count too.
+let indicatorRoles: Set<String> = ["AXButton", "AXGroup", "AXTimeGroup", "AXStaticText", "AXImage"]
 let textInputRoles: Set<String> = ["AXTextField", "AXTextArea", "AXSearchField", "AXComboBox"]
 
 struct MenuSelector {
