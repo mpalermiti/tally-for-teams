@@ -1,8 +1,8 @@
 import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { TeamsBridge, type BridgeProcess } from "../src/teams/bridge";
+import { BRIDGE_DEADLINE_SAFETY_MS, TeamsBridge, commandDeadline, type BridgeProcess } from "../src/teams/bridge";
 import type { Snapshot } from "../src/teams/protocol";
 import { ANCHOR_ID, BUTTON_IDS } from "../src/teams/selectors";
 
@@ -49,6 +49,11 @@ async function until(predicate: () => boolean, timeoutMs = 2000): Promise<void> 
 	}
 }
 
+async function flushStatus(): Promise<void> {
+	await Promise.resolve();
+	await Promise.resolve();
+}
+
 describe("TeamsBridge", () => {
 	let helpers: FakeHelper[];
 	let bridge: TeamsBridge;
@@ -73,7 +78,10 @@ describe("TeamsBridge", () => {
 		bridge.start();
 	}
 
-	afterEach(() => bridge?.stop());
+	afterEach(() => {
+		bridge?.stop();
+		vi.useRealTimers();
+	});
 
 	it("starts offline, then tells the helper which buttons to watch", async () => {
 		start();
@@ -83,6 +91,7 @@ describe("TeamsBridge", () => {
 			cmd: "watch",
 			anchor: ANCHOR_ID,
 			bundleIds: ["com.microsoft.teams2"],
+			indicatorContainers: ["indicators"],
 			ids: expect.arrayContaining([
 				...Object.values(BUTTON_IDS),
 				"raisehands-button",
@@ -114,6 +123,62 @@ describe("TeamsBridge", () => {
 		await expect(pending).resolves.toEqual({ ok: true, message: "pressed" });
 	});
 
+	it("adds an absolute deadline to commands that act on Teams", async () => {
+		const sentAt = 1_800_000_000_000;
+		start({ requestTimeoutMs: 4_000, menuRequestTimeoutMs: 6_000, wallClockNow: () => sentAt });
+		latest().status({ [BUTTON_IDS.mute]: "Mute mic" });
+		await until(() => bridge.snapshot.online);
+
+		const press = bridge.request("toggle-mute");
+		await until(() => latest().written.some((m) => m.cmd === "press"));
+		const sentPress = latest().written.find((m) => m.cmd === "press");
+		expect(sentPress).toMatchObject({
+			cmd: "press",
+			deadline: sentAt + 4_000 - BRIDGE_DEADLINE_SAFETY_MS,
+		});
+		latest().say({ type: "result", req: sentPress.req, ok: true, message: "pressed" });
+		await expect(press).resolves.toMatchObject({ ok: true });
+
+		const menu = bridge.request("send-reaction", { type: "like" });
+		await until(() => latest().written.some((m) => m.cmd === "menu"));
+		const sentMenu = latest().written.find((m) => m.cmd === "menu");
+		expect(sentMenu).toMatchObject({
+			cmd: "menu",
+			deadline: sentAt + 6_000 - BRIDGE_DEADLINE_SAFETY_MS,
+		});
+		latest().say({ type: "result", req: sentMenu.req, ok: true, message: "pressed" });
+		await expect(menu).resolves.toMatchObject({ ok: true });
+	});
+
+	it("keeps menu requests alive longer than plain presses", async () => {
+		start({ requestTimeoutMs: 100, menuRequestTimeoutMs: 600 });
+		latest().status({ [BUTTON_IDS.mute]: "Mute mic" });
+		await until(() => bridge.snapshot.online);
+		vi.useFakeTimers();
+
+		const press = bridge.request("toggle-mute");
+		const menu = bridge.request("send-reaction", { type: "like" });
+		await Promise.resolve();
+		await Promise.resolve();
+		let menuSettled = false;
+		void menu.then(() => {
+			menuSettled = true;
+		});
+
+		await vi.advanceTimersByTimeAsync(100);
+		await expect(press).resolves.toEqual({ ok: false, message: "Teams didn't respond" });
+		expect(menuSettled).toBe(false);
+
+		await vi.advanceTimersByTimeAsync(500);
+		await expect(menu).resolves.toEqual({ ok: false, message: "Teams didn't respond" });
+	});
+
+	it("computes deadlines with at least one second of helper-side safety", () => {
+		expect(commandDeadline(10_000, 4_000)).toBe(13_000);
+		expect(commandDeadline(10_000, 4_000, 250)).toBe(13_000);
+		expect(commandDeadline(10_000, 4_000, 1_500)).toBe(12_500);
+	});
+
 	it("passes a failed press through, so the key can flash an alert", async () => {
 		start();
 		latest().status({ [BUTTON_IDS.mute]: "Mute mic" });
@@ -123,6 +188,50 @@ describe("TeamsBridge", () => {
 		const sent = latest().written.find((m) => m.cmd === "menu");
 		latest().say({ type: "result", req: sent.req, ok: false, message: "No surprised/wow in menu" });
 		await expect(pending).resolves.toEqual({ ok: false, message: "No surprised/wow in menu" });
+	});
+
+	it("keeps helper error codes on failed menu requests", async () => {
+		start();
+		latest().status({ [BUTTON_IDS.mute]: "Mute mic" });
+		await until(() => bridge.snapshot.online);
+
+		const pending = bridge.request("send-reaction", { type: "like" });
+		await until(() => latest().written.some((m) => m.cmd === "menu"));
+		const sent = latest().written.find((m) => m.cmd === "menu");
+		latest().say({
+			type: "result",
+			req: sent.req,
+			ok: false,
+			message: "Teams' main window has focus, so its menus can't close from the background. Click the meeting window once.",
+			error: "meeting-window-not-focused",
+		});
+
+		await expect(pending).resolves.toEqual({
+			ok: false,
+			message: "Teams' main window has focus, so its menus can't close from the background. Click the meeting window once.",
+			error: "meeting-window-not-focused",
+		});
+	});
+
+	it("sends Background blur as a bridge-side toggle through the video options menu", async () => {
+		start();
+		latest().status({ [BUTTON_IDS.mute]: "Mute mic", "video-button-configure": "Open video options" });
+		await until(() => bridge.snapshot.online);
+
+		const pending = bridge.request("set-background-blur");
+		await until(() => latest().written.some((m) => m.cmd === "menu"));
+		const sent = latest().written.find((m) => m.cmd === "menu");
+		expect(sent).toMatchObject({
+			cmd: "menu",
+			id: "video-button-configure",
+			toggle: {
+				on: { itemIds: [], labels: ["standard blur", "blur"], excludeLabels: ["no background effect", "none"] },
+				off: { itemIds: [], labels: ["no background effect", "none"], excludeLabels: [] },
+			},
+			req: expect.any(Number),
+		});
+		latest().say({ type: "result", req: sent.req, ok: true, message: "pressed Standard blur; selection: none selected", selected: false });
+		await expect(pending).resolves.toEqual({ ok: true, message: "pressed Standard blur; selection: none selected", selected: false });
 	});
 
 	it("answers unsupported actions without bothering the helper", async () => {
@@ -171,6 +280,101 @@ describe("TeamsBridge", () => {
 		latest().say({ type: "log", message: "menu offered: Like | Heart" });
 		await until(() => logs.length > 0);
 		expect(logs).toContain("menu offered: Like | Heart");
+	});
+
+	it("publishes teams-changed from one marker-only status after the debounce timer", async () => {
+		vi.useFakeTimers();
+		const logs: string[] = [];
+		start({ now: () => Date.now(), log: (m) => logs.push(m) });
+		latest().status({ [BUTTON_IDS.mute]: "Mute mic" });
+		await flushStatus();
+		expect(bridge.snapshot.state).toMatchObject({ isInMeeting: true, isMuted: false });
+
+		const changed = {
+			markers: ["hangup-button", "horizontalEnd"],
+			markerControlIds: ["hangup-button", "share-button"],
+		};
+		latest().status({ "hangup-button": "Leave" }, changed);
+		await flushStatus();
+		expect(bridge.snapshot.reason).toBeUndefined();
+		expect(bridge.snapshot.state).toMatchObject({ isInMeeting: true, isMuted: false });
+		expect(vi.getTimerCount()).toBe(1);
+		expect(logs.filter((m) => m.includes("teams-changed markers"))).toEqual([]);
+
+		await vi.advanceTimersByTimeAsync(2_999);
+		expect(bridge.snapshot.reason).toBeUndefined();
+
+		await vi.advanceTimersByTimeAsync(1);
+		expect(bridge.snapshot.reason).toBe("teams-changed");
+		expect(logs.filter((m) => m.includes("teams-changed markers"))).toEqual([
+			"teams-changed markers: hangup-button | horizontalEnd; control ids: hangup-button | share-button",
+		]);
+
+		latest().status({ "hangup-button": "Leave" }, changed);
+		await flushStatus();
+		expect(logs.filter((m) => m.includes("teams-changed markers"))).toHaveLength(1);
+
+		await vi.advanceTimersByTimeAsync(5_000);
+		expect(logs.filter((m) => m.includes("teams-changed markers"))).toHaveLength(1);
+	});
+
+	it("clears a pending teams-changed timer when the helper crashes", async () => {
+		vi.useFakeTimers();
+		const logs: string[] = [];
+		start({ now: () => Date.now(), log: (m) => logs.push(m) });
+		latest().status({ [BUTTON_IDS.mute]: "Mute mic" });
+		await flushStatus();
+
+		latest().status({ "hangup-button": "Leave" }, { markers: ["hangup-button", "horizontalEnd"], markerControlIds: ["hangup-button"] });
+		await flushStatus();
+		expect(vi.getTimerCount()).toBe(1);
+
+		latest().crash();
+		expect(bridge.snapshot.reason).toBe("starting");
+		expect(vi.getTimerCount()).toBe(1); // restart timer only; the teams-changed timer was cleared
+
+		await vi.advanceTimersByTimeAsync(3_000);
+		expect(bridge.snapshot.reason).toBe("starting");
+		expect(logs.filter((m) => m.includes("teams-changed markers"))).toEqual([]);
+	});
+
+	it("cancels a pending teams-changed timer when a normal status arrives", async () => {
+		vi.useFakeTimers();
+		const logs: string[] = [];
+		start({ now: () => Date.now(), log: (m) => logs.push(m) });
+		latest().status({ [BUTTON_IDS.mute]: "Mute mic" });
+		await flushStatus();
+
+		latest().status({ "hangup-button": "Leave" }, { markers: ["hangup-button", "horizontalEnd"], markerControlIds: ["hangup-button"] });
+		await flushStatus();
+		expect(vi.getTimerCount()).toBe(1);
+
+		await vi.advanceTimersByTimeAsync(1_500);
+		latest().status({ [BUTTON_IDS.mute]: "Mute mic" });
+		await flushStatus();
+		expect(bridge.snapshot.state.isInMeeting).toBe(true);
+		expect(bridge.snapshot.reason).toBeUndefined();
+		expect(vi.getTimerCount()).toBe(0);
+
+		await vi.advanceTimersByTimeAsync(3_000);
+		expect(bridge.snapshot.reason).toBeUndefined();
+		expect(logs.filter((m) => m.includes("teams-changed markers"))).toEqual([]);
+	});
+
+	it("clears a pending teams-changed timer on stop", async () => {
+		vi.useFakeTimers();
+		const logs: string[] = [];
+		start({ now: () => Date.now(), log: (m) => logs.push(m) });
+		latest().status({ [BUTTON_IDS.mute]: "Mute mic" });
+		await flushStatus();
+		latest().status({ "hangup-button": "Leave" }, { markers: ["hangup-button", "horizontalEnd"], markerControlIds: ["hangup-button"] });
+		await flushStatus();
+		expect(vi.getTimerCount()).toBe(1);
+
+		bridge.stop();
+		expect(vi.getTimerCount()).toBe(0);
+		await vi.advanceTimersByTimeAsync(3_000);
+		expect(logs.filter((m) => m.includes("teams-changed markers"))).toEqual([]);
 	});
 
 	it("stops the helper and doesn't restart it", async () => {

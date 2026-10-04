@@ -9,7 +9,7 @@ body:
     id: key
     attributes:
       label: Which key?
-      options: [Mute, Mute dial (Stream Deck +), Camera, Raise hand, Leave, React, Chat, Share, All of them]
+      options: [Mute, Mute dial (Stream Deck +), Camera, Raise hand, Leave, React, Chat, Share, People, Background blur, Meeting timer, Teams in another language, All of them]
     validations:
       required: true
   - type: textarea

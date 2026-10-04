@@ -3,8 +3,19 @@ import { chmodSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { CameraKey, ChatKey, HandKey, LeaveKey, MuteKey, ReactKey, ShareKey } from "./actions/keys";
+import { BlurKey, CameraKey, ChatKey, HandKey, LeaveKey, MuteKey, PeopleKey, ReactKey, ShareKey, TimerKey } from "./actions/keys";
+import {
+	INITIAL_PROFILE_SWITCH_STATE,
+	meetingStatusForProfileSwitch,
+	nextProfileSwitch,
+	type ProfileSwitchControllerType,
+	type ProfileSwitchDevice,
+	type ProfileSwitchState,
+	type ProfileSwitchVisibleAction,
+} from "./profiles";
 import { TeamsBridge } from "./teams/bridge";
+import type { Snapshot } from "./teams/protocol";
+import { loadSelectors } from "./teams/selectors-loader";
 
 streamDeck.logger.setLevel("info");
 
@@ -20,31 +31,129 @@ try {
 	streamDeck.logger.error(`Can't make teams-bridge executable: ${(error as Error).message}`);
 }
 
+const selectorLoad = loadSelectors();
+for (const problem of selectorLoad.problems) streamDeck.logger.warn(`selectors: ${problem}`);
+
 const teams = new TeamsBridge({
 	command: bridgePath,
 	log: (message) => streamDeck.logger.info(`bridge: ${message}`),
+	selectors: selectorLoad.selectors,
 });
 
 const keys = [
 	new MuteKey(teams),
 	new CameraKey(teams),
+	new BlurKey(teams),
 	new HandKey(teams),
 	new LeaveKey(teams),
 	new ReactKey(teams),
 	new ChatKey(teams),
 	new ShareKey(teams),
+	new TimerKey(teams),
+	new PeopleKey(teams),
 ];
 for (const key of keys) streamDeck.actions.registerAction(key);
 
+type GlobalSettings = { autoSwitchProfile?: boolean };
+
+let autoSwitchProfile: boolean | undefined;
+let profileSwitchState: ProfileSwitchState = INITIAL_PROFILE_SWITCH_STATE;
+let profileSwitchRecheckTimer: ReturnType<typeof setTimeout> | undefined;
+
+function applyGlobalSettings(settings: GlobalSettings): void {
+	autoSwitchProfile = settings.autoSwitchProfile === true;
+	void syncMeetingProfile(teams.snapshot);
+}
+
+streamDeck.settings.onDidReceiveGlobalSettings<GlobalSettings>((ev) => applyGlobalSettings(ev.settings));
+
+function connectedProfileDevices(): ProfileSwitchDevice[] {
+	const devices: ProfileSwitchDevice[] = [];
+	streamDeck.devices.forEach((device) => {
+		if (device.isConnected !== false) {
+			devices.push({ id: device.id, type: device.type, visibleActions: visibleActions(device) });
+		}
+	});
+	return devices;
+}
+
+function visibleActions(
+	device: { actions: Iterable<{ manifestId: string; controllerType?: string; coordinates?: { column?: number; row?: number } }> },
+): ProfileSwitchVisibleAction[] {
+	const actions: ProfileSwitchVisibleAction[] = [];
+	for (const action of device.actions) {
+		const coordinates = readCoordinates(action.coordinates);
+		const controllerType = readControllerType(action.controllerType);
+		actions.push({
+			manifestId: action.manifestId,
+			...(controllerType ? { controllerType } : {}),
+			...(coordinates ? { coordinates } : {}),
+		});
+	}
+	return actions;
+}
+
+function readControllerType(controllerType: string | undefined): ProfileSwitchControllerType | undefined {
+	if (controllerType === "Encoder" || controllerType === "Keypad" || controllerType === "Neo") return controllerType;
+	return undefined;
+}
+
+function readCoordinates(coordinates: { column?: number; row?: number } | undefined): ProfileSwitchVisibleAction["coordinates"] {
+	const column = coordinates?.column;
+	const row = coordinates?.row;
+	if (typeof column !== "number" || typeof row !== "number" || !Number.isInteger(column) || !Number.isInteger(row)) return undefined;
+	return { column, row };
+}
+
+async function syncMeetingProfile(snapshot: Snapshot): Promise<void> {
+	clearProfileSwitchRecheck();
+	const result = nextProfileSwitch(profileSwitchState, {
+		autoSwitchProfile,
+		meetingStatus: meetingStatusForProfileSwitch(snapshot),
+		nowMs: Date.now(),
+		devices: connectedProfileDevices(),
+	});
+	profileSwitchState = result.state;
+	scheduleProfileSwitchRecheck(result.recheckInMs);
+	for (const action of result.actions) {
+		try {
+			await streamDeck.profiles.switchToProfile(action.deviceId, action.profileName);
+		} catch (error) {
+			streamDeck.logger.warn(`profiles: couldn't switch ${action.deviceId}: ${(error as Error).message}`);
+		}
+	}
+}
+
+function clearProfileSwitchRecheck(): void {
+	if (!profileSwitchRecheckTimer) return;
+	clearTimeout(profileSwitchRecheckTimer);
+	profileSwitchRecheckTimer = undefined;
+}
+
+function scheduleProfileSwitchRecheck(delayMs: number | undefined): void {
+	if (delayMs === undefined) return;
+	profileSwitchRecheckTimer = setTimeout(() => {
+		profileSwitchRecheckTimer = undefined;
+		void syncMeetingProfile(teams.snapshot);
+	}, delayMs);
+}
+
 let lastReason: string | undefined = "starting";
 teams.on("change", (snapshot) => {
-	const reason = snapshot.online ? (snapshot.state.isInMeeting ? "in a meeting" : "connected") : snapshot.reason;
+	const reason =
+		snapshot.reason === "teams-changed" ? "teams-changed"
+		: snapshot.online ? (snapshot.state.isInMeeting ? "in a meeting" : "connected")
+		: snapshot.reason;
 	if (reason !== lastReason) {
 		lastReason = reason;
 		streamDeck.logger.info(`Teams: ${reason}`);
 	}
 	for (const key of keys) void key.refresh();
+	void syncMeetingProfile(snapshot);
 });
 
 await streamDeck.connect();
 teams.start();
+void streamDeck.settings.getGlobalSettings<GlobalSettings>().then(applyGlobalSettings, (error: unknown) => {
+	streamDeck.logger.warn(`profiles: couldn't read global settings; auto-switch stays off: ${(error as Error).message}`);
+});

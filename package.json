@@ -1,6 +1,6 @@
 {
   "name": "tally-for-teams",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "description": "Microsoft Teams meeting controls for Stream Deck on Mac, through macOS Accessibility.",
   "scripts": {
     "build": "npm run build:bridge && rollup -c",
@@ -8,6 +8,7 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "icons": "node --import tsx scripts/icons.ts",
+    "profiles": "node --import tsx scripts/profiles.ts",
     "art": "node --import tsx scripts/art.ts",
     "link": "streamdeck link ai.michaelp.tally.sdPlugin",
     "pack": "npm run build && mkdir -p dist && streamdeck pack ai.michaelp.tally.sdPlugin --force --output dist",

@@ -17,12 +17,14 @@ import { GLYPHS, type GlyphName } from "./glyphs";
  */
 export type Tone = "offline" | "idle" | "off" | "ready" | "on" | "danger";
 
-export const KEY_KINDS = ["mute", "camera", "hand", "leave", "react", "chat", "share"] as const;
+export const KEY_KINDS = ["mute", "camera", "blur", "hand", "leave", "react", "chat", "share", "timer", "people"] as const;
 export type KeyKind = (typeof KEY_KINDS)[number];
 
 export interface Visual {
 	tone: Tone;
 	glyph: GlyphName;
+	/** Red dot: the meeting is being recorded. Shown only on mic and camera. */
+	recording: boolean;
 }
 
 export const OFFLINE_SNAPSHOT: Snapshot = { online: false, state: EMPTY_STATE, permissions: NO_PERMISSIONS };
@@ -39,11 +41,13 @@ const REACTION_GLYPHS: Record<Reaction, GlyphName> = {
 export function visualFor(kind: KeyKind, snapshot: Snapshot, options: { reaction?: Reaction } = {}): Visual {
 	const { online, state, permissions: can } = snapshot;
 	const live = online && state.isInMeeting;
+	const recording = live && state.isRecording && (kind === "mute" || kind === "camera");
 
 	// [glyph when on/neutral, glyph when off, available now?, currently on?]
 	const spec: Record<KeyKind, [GlyphName, GlyphName, boolean, boolean | "action" | "danger"]> = {
-		mute: ["mic", "mic-off", can.canToggleMute, !state.isMuted],
-		camera: ["video", "video-off", can.canToggleVideo, state.isVideoOn],
+		mute: ["mic", "mic-off", can.canToggleMute, state.isMuteKnown ? !state.isMuted : "action"],
+		camera: ["video", "video-off", can.canToggleVideo, state.isVideoKnown ? state.isVideoOn : "action"],
+		blur: ["blur", "blur", can.canToggleBlur, state.isBackgroundBlurKnown ? state.isBackgroundBlurred : "action"],
 		hand: ["hand", "hand", can.canToggleHand, state.isHandRaised],
 		leave: ["phone-off", "phone-off", can.canLeave, "danger"],
 		react: [REACTION_GLYPHS[options.reaction ?? "like"], REACTION_GLYPHS[options.reaction ?? "like"], can.canReact, "action"],
@@ -54,16 +58,23 @@ export function visualFor(kind: KeyKind, snapshot: Snapshot, options: { reaction
 			state.hasUnreadMessages || "action",
 		],
 		// While sharing, the key stops sharing, so it stays usable even if the tray isn't.
-		share: ["screen-share", "screen-share", can.canToggleShareTray || (state.isSharing && can.canStopSharing), state.isSharing || "action"],
+		share: [
+			"screen-share",
+			"screen-share",
+			can.canToggleShareTray || (state.isSharing && can.canStopSharing),
+			state.isSharingKnown ? state.isSharing || "action" : "action",
+		],
+		timer: ["timer", "timer", false, "action"],
+		people: ["users", "users", can.canTogglePeople, "action"],
 	};
 
 	const [onGlyph, offGlyph, available, current] = spec[kind];
 
-	if (!online) return { tone: "offline", glyph: onGlyph };
-	if (!live || !available) return { tone: "idle", glyph: onGlyph };
-	if (current === "danger") return { tone: "danger", glyph: onGlyph };
-	if (current === "action") return { tone: "ready", glyph: onGlyph };
-	return current ? { tone: "on", glyph: onGlyph } : { tone: "off", glyph: offGlyph };
+	if (!online) return { tone: "offline", glyph: onGlyph, recording };
+	if (!live || !available) return { tone: "idle", glyph: onGlyph, recording };
+	if (current === "danger") return { tone: "danger", glyph: onGlyph, recording };
+	if (current === "action") return { tone: "ready", glyph: onGlyph, recording };
+	return current ? { tone: "on", glyph: onGlyph, recording } : { tone: "off", glyph: offGlyph, recording };
 }
 
 // ── Drawing ────────────────────────────────────────────────────────────────
@@ -101,6 +112,12 @@ function background(tone: Tone, width: number, height: number): string {
 		`<defs><radialGradient id="g" cx="50%" cy="42%" r="75%"><stop offset="0" stop-color="${glow[0]}"/><stop offset="1" stop-color="${glow[1]}"/></radialGradient></defs>` +
 		`<rect width="${width}" height="${height}" fill="url(#g)"/>`
 	);
+}
+
+/** Red "being recorded" dot, ringed so it separates from amber and dark keys. */
+function recordingBadge(visual: Visual, cx: number, cy: number): string {
+	if (!visual.recording) return "";
+	return `<circle data-badge="recording" cx="${cx}" cy="${cy}" r="9" fill="#FF3B30" stroke="${INK[visual.tone].bg}" stroke-width="3"/>`;
 }
 
 /** Temporary marks over a key: how far through a hold, or a one-word hint. */
@@ -146,6 +163,7 @@ export function keySvg(visual: Visual, overlay: KeyOverlay = {}): string {
 		SIZE,
 		background(visual.tone, SIZE, SIZE) +
 			glyphGroup(visual.glyph, ink, offset, offset, GLYPH_SIZE) +
+			recordingBadge(visual, 120, 24) +
 			(overlay.progress === undefined ? "" : progressRing(overlay.progress, ink)) +
 			(overlay.hint ? hintText(overlay.hint, ink) : ""),
 	);
@@ -155,10 +173,37 @@ export function keyDataUrl(visual: Visual, overlay?: KeyOverlay): string {
 	return dataUrl(keySvg(visual, overlay));
 }
 
+export function formatTimerSeconds(seconds: number): string {
+	const whole = Math.max(0, Math.floor(seconds));
+	const h = Math.floor(whole / 3600);
+	const m = Math.floor((whole % 3600) / 60);
+	const s = whole % 60;
+	return h > 0 ? `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}` : `${m}:${String(s).padStart(2, "0")}`;
+}
+
+/** A 144×144 custom face for the meeting timer key. */
+export function timerFace(seconds: number | undefined, tone: Tone): string {
+	const ink = INK[tone].glyph;
+	const text = seconds === undefined ? "—" : formatTimerSeconds(seconds);
+	const fontSize = text.length > 5 ? 32 : 40;
+	return svg(
+		SIZE,
+		SIZE,
+		background(tone, SIZE, SIZE) +
+			glyphGroup("timer", ink, 18, 18, 28) +
+			`<text x="${SIZE / 2}" y="88" text-anchor="middle" font-family="-apple-system, Helvetica, sans-serif" ` +
+			`font-size="${fontSize}" font-weight="700" font-variant-numeric="tabular-nums" fill="${ink}">${escapeXml(text)}</text>`,
+	);
+}
+
+export function timerDataUrl(seconds: number | undefined, tone: Tone): string {
+	return dataUrl(timerFace(seconds, tone));
+}
+
 // ── Stream Deck+ touch strip (mute dial) ───────────────────────────────────
 //
 // Each dial owns a 200×100 slice of the strip. The face (background, glyph,
-// and overlays) is our SVG; the words are native text items from
+// badge and overlays) is our SVG; the words are native text items from
 // layouts/mute-dial.json, so they use Stream Deck's own font rendering.
 
 /** Label and hint colours per tone; the hint sits one step quieter than the label. */
@@ -181,6 +226,7 @@ export interface DialFeedback {
 const OFFLINE_TEXT: Record<OfflineReason, [string, string]> = {
 	"no-permission": ["Allow", "Accessibility"],
 	"teams-not-running": ["Teams", "Not running"],
+	"teams-changed": ["Teams changed", "See README"],
 	starting: ["Teams", "Connecting"],
 };
 
@@ -190,8 +236,11 @@ export function muteDialFeedback(snapshot: Snapshot): DialFeedback {
 	const { state } = snapshot;
 
 	const [label, detail] =
-		visual.tone === "offline" ? OFFLINE_TEXT[snapshot.reason ?? "starting"]
+		snapshot.reason === "teams-changed" ? OFFLINE_TEXT["teams-changed"]
+		: visual.tone === "offline" ? OFFLINE_TEXT[snapshot.reason ?? "starting"]
 		: visual.tone === "idle" ? ["Mic", state.isInMeeting ? "Not available" : "No meeting"]
+		: !state.isMuteKnown ? ["Mic", "Ready"]
+		: visual.recording ? [state.isMuted ? "Muted" : "Live", "Recording"]
 		: state.isMuted ? ["Muted", "Hold to talk"]
 		: ["Live", "Hold to mute"];
 
@@ -199,7 +248,8 @@ export function muteDialFeedback(snapshot: Snapshot): DialFeedback {
 		200,
 		100,
 		background(visual.tone, 200, 100) +
-			glyphGroup(visual.glyph, INK[visual.tone].glyph, 22, 24, 52),
+			glyphGroup(visual.glyph, INK[visual.tone].glyph, 22, 24, 52) +
+			recordingBadge(visual, 182, 18),
 	);
 
 	return {

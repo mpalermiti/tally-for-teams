@@ -11,7 +11,19 @@ import {
 	type Snapshot,
 	type TeamsAction,
 } from "./protocol";
-import { ANCHOR_ID, TEAMS_BUNDLE_IDS, WATCH_IDS, commandFor, snapshotFrom, type BridgeStatus } from "./selectors";
+import {
+	DEFAULT_ACTIVE_SELECTORS,
+	TEAMS_BUNDLE_IDS,
+	anchorId,
+	commandFor,
+	indicatorContainerIds,
+	meetingMarkerIds,
+	TeamsChangedDebouncer,
+	watchIds,
+	type BridgeCommand,
+	type BridgeStatus,
+	type Selectors,
+} from "./selectors";
 
 /** The parts of a child process the bridge uses; tests substitute a fake. */
 export interface BridgeProcess {
@@ -27,8 +39,15 @@ export interface TeamsBridgeOptions {
 	spawn?: (command: string) => BridgeProcess;
 	/** Restart delays after the helper exits; the last value repeats. */
 	backoffMs?: number[];
+	/** Plain press timeout. Kept as the historical option name for compatibility. */
 	requestTimeoutMs?: number;
+	menuRequestTimeoutMs?: number;
+	deadlineSafetyMs?: number;
 	log?: (message: string) => void;
+	selectors?: Selectors;
+	now?: () => number;
+	/** Absolute wall-clock milliseconds, used only for helper deadlines. */
+	wallClockNow?: () => number;
 }
 
 interface Pending {
@@ -39,6 +58,17 @@ interface Pending {
 const STARTING: Snapshot = { online: false, reason: "starting", state: EMPTY_STATE, permissions: NO_PERMISSIONS };
 
 const PERMISSION_HINT = "Allow Stream Deck in System Settings → Privacy & Security → Accessibility";
+export const BRIDGE_PRESS_TIMEOUT_MS = 4_000;
+export const BRIDGE_MENU_TIMEOUT_MS = 6_000;
+export const BRIDGE_DEADLINE_SAFETY_MS = 1_000;
+
+export function commandDeadline(
+	sentAtMs: number,
+	timeoutMs: number,
+	safetyMs = BRIDGE_DEADLINE_SAFETY_MS,
+): number {
+	return Math.floor(sentAtMs + timeoutMs - Math.max(BRIDGE_DEADLINE_SAFETY_MS, safetyMs));
+}
 
 /**
  * Runs the Swift helper that reads Teams through macOS Accessibility, and turns its
@@ -46,22 +76,33 @@ const PERMISSION_HINT = "Allow Stream Deck in System Settings → Privacy & Secu
  * retired local API: a live `snapshot`, a `change` event, and `request()`.
  */
 export class TeamsBridge extends EventEmitter<{ change: [Snapshot] }> {
-	#options: Required<Omit<TeamsBridgeOptions, "log">> & Pick<TeamsBridgeOptions, "log">;
+	#options: Required<Omit<TeamsBridgeOptions, "log" | "selectors" | "now">> & Pick<TeamsBridgeOptions, "log">;
+	#selectors: Selectors;
+	#teamsChanged: TeamsChangedDebouncer;
 	#process: BridgeProcess | undefined;
 	#snapshot: Snapshot = STARTING;
 	#running = false;
 	#attempt = 0;
 	#restartTimer: NodeJS.Timeout | undefined;
+	#teamsChangedTimer: NodeJS.Timeout | undefined;
+	#lastStatus: BridgeStatus | undefined;
 	#nextRequestId = 1;
 	#pending = new Map<number, Pending>();
+	#lastTeamsChangedLogSignature = "";
 
 	constructor(options: TeamsBridgeOptions) {
 		super();
+		const { selectors = DEFAULT_ACTIVE_SELECTORS, now = () => performance.now(), ...rest } = options;
+		this.#selectors = selectors;
+		this.#teamsChanged = new TeamsChangedDebouncer(now);
 		this.#options = {
 			spawn: (command) => spawnProcess(command, [], { stdio: ["pipe", "pipe", "inherit"] }) as BridgeProcess,
 			backoffMs: [1_000, 2_000, 5_000, 10_000],
-			requestTimeoutMs: 4_000, // menus take up to ~2 s to open and search
-			...options,
+			requestTimeoutMs: BRIDGE_PRESS_TIMEOUT_MS,
+			menuRequestTimeoutMs: BRIDGE_MENU_TIMEOUT_MS,
+			deadlineSafetyMs: BRIDGE_DEADLINE_SAFETY_MS,
+			wallClockNow: Date.now,
+			...rest,
 		};
 	}
 
@@ -78,6 +119,7 @@ export class TeamsBridge extends EventEmitter<{ change: [Snapshot] }> {
 	stop(): void {
 		this.#running = false;
 		clearTimeout(this.#restartTimer);
+		this.#clearTeamsChangedTimer();
 		const process = this.#process;
 		this.#process = undefined;
 		process?.kill();
@@ -86,7 +128,7 @@ export class TeamsBridge extends EventEmitter<{ change: [Snapshot] }> {
 
 	/** Performs a key's action in Teams. Never rejects. */
 	async request(action: TeamsAction, parameters: ActionParameters = {}): Promise<RequestResult> {
-		const command = commandFor(action, parameters);
+		const command = commandFor(action, parameters, this.#selectors);
 		if ("unsupported" in command) return { ok: false, message: command.unsupported };
 
 		if (this.#snapshot.reason === "no-permission") {
@@ -96,13 +138,15 @@ export class TeamsBridge extends EventEmitter<{ change: [Snapshot] }> {
 		if (!this.#process || !this.#snapshot.online) return { ok: false, message: "Teams isn't running" };
 
 		const req = this.#nextRequestId++;
+		const timeoutMs = timeoutForCommand(command, this.#options);
+		const deadline = commandDeadline(this.#options.wallClockNow(), timeoutMs, this.#options.deadlineSafetyMs);
 		return new Promise((resolve) => {
 			const timer = setTimeout(() => {
 				this.#pending.delete(req);
 				resolve({ ok: false, message: "Teams didn't respond" });
-			}, this.#options.requestTimeoutMs);
+			}, timeoutMs);
 			this.#pending.set(req, { resolve, timer });
-			this.#write({ ...command, req });
+			this.#write({ ...command, req, deadline });
 		});
 	}
 
@@ -123,11 +167,18 @@ export class TeamsBridge extends EventEmitter<{ change: [Snapshot] }> {
 		// A missing or unlaunchable binary surfaces as an error event on real processes.
 		(process as unknown as EventEmitter).on?.("error", (error: Error) => this.#options.log?.(`teams-bridge: ${error.message}`));
 
-		this.#write({ cmd: "watch", ids: WATCH_IDS, anchor: ANCHOR_ID, bundleIds: TEAMS_BUNDLE_IDS });
+		this.#write({
+			cmd: "watch",
+			ids: watchIds(this.#selectors),
+			anchor: anchorId(this.#selectors),
+			markers: meetingMarkerIds(this.#selectors),
+			indicatorContainers: indicatorContainerIds(this.#selectors),
+			bundleIds: TEAMS_BUNDLE_IDS,
+		});
 	}
 
 	#handle(line: string): void {
-		let message: { type?: string; req?: number; ok?: boolean; message?: string };
+		let message: { type?: string; req?: number; ok?: boolean; message?: string; error?: string; selected?: boolean } & Partial<BridgeStatus>;
 		try {
 			message = JSON.parse(line);
 		} catch {
@@ -135,16 +186,69 @@ export class TeamsBridge extends EventEmitter<{ change: [Snapshot] }> {
 		}
 		if (message.type === "status") {
 			this.#attempt = 0;
-			this.#publish(snapshotFrom(message as BridgeStatus));
+			const status = message as BridgeStatus;
+			this.#lastStatus = status;
+			const snapshot = this.#teamsChanged.next(status, this.#selectors);
+			this.#maybeLogTeamsChanged(status, snapshot);
+			this.#publish(snapshot);
+			this.#syncTeamsChangedTimer(snapshot);
 		} else if (message.type === "result" && typeof message.req === "number") {
 			const pending = this.#pending.get(message.req);
 			if (!pending) return;
 			this.#pending.delete(message.req);
 			clearTimeout(pending.timer);
-			pending.resolve({ ok: message.ok === true, message: message.message ?? "" });
+			const error = typeof message.error === "string" ? message.error : undefined;
+			pending.resolve({
+				ok: message.ok === true,
+				message: message.message ?? message.error ?? "",
+				...(error !== undefined ? { error } : {}),
+				...(typeof message.selected === "boolean" ? { selected: message.selected } : {}),
+			});
 		} else if (message.type === "log" && message.message) {
 			this.#options.log?.(message.message);
 		}
+	}
+
+	#syncTeamsChangedTimer(snapshot: Snapshot): void {
+		if (snapshot.reason === "teams-changed") {
+			this.#clearTeamsChangedTimer();
+			return;
+		}
+		const delayMs = this.#teamsChanged.pendingDelayMs();
+		if (delayMs === undefined) {
+			this.#clearTeamsChangedTimer();
+			return;
+		}
+		this.#clearTeamsChangedTimer();
+		this.#teamsChangedTimer = setTimeout(() => this.#fireTeamsChangedTimer(), delayMs);
+	}
+
+	#fireTeamsChangedTimer(): void {
+		this.#teamsChangedTimer = undefined;
+		if (!this.#lastStatus) return;
+		const snapshot = this.#teamsChanged.next(this.#lastStatus, this.#selectors);
+		this.#maybeLogTeamsChanged(this.#lastStatus, snapshot);
+		this.#publish(snapshot);
+		this.#syncTeamsChangedTimer(snapshot);
+	}
+
+	#clearTeamsChangedTimer(): void {
+		clearTimeout(this.#teamsChangedTimer);
+		this.#teamsChangedTimer = undefined;
+	}
+
+	#maybeLogTeamsChanged(status: BridgeStatus, snapshot: Snapshot): void {
+		if (snapshot.reason !== "teams-changed") return;
+		const markers = status.markers ?? [];
+		const allIds = status.markerControlIds ?? [];
+		const ids = allIds.slice(0, 60);
+		const signature = `${markers.join("|")}::${ids.join("|")}::${allIds.length}`;
+		if (signature === this.#lastTeamsChangedLogSignature) return;
+		this.#lastTeamsChangedLogSignature = signature;
+		const more = allIds.length > ids.length ? ` (+${allIds.length - ids.length} more)` : "";
+		this.#options.log?.(
+			`teams-changed markers: ${markers.join(" | ")}; control ids: ${ids.length ? ids.join(" | ") : "none"}${more}`,
+		);
 	}
 
 	#write(message: object): void {
@@ -161,11 +265,14 @@ export class TeamsBridge extends EventEmitter<{ change: [Snapshot] }> {
 
 	/** Meeting state is unknowable without the helper, so forget it rather than show stale keys. */
 	#reset(): void {
+		this.#clearTeamsChangedTimer();
+		this.#lastStatus = undefined;
 		for (const { resolve, timer } of this.#pending.values()) {
 			clearTimeout(timer);
 			resolve({ ok: false, message: "Lost contact with Teams" });
 		}
 		this.#pending.clear();
+		this.#teamsChanged.reset();
 		if (this.#snapshot !== STARTING) this.#publish(STARTING);
 	}
 
@@ -174,4 +281,11 @@ export class TeamsBridge extends EventEmitter<{ change: [Snapshot] }> {
 		this.#snapshot = snapshot;
 		this.emit("change", snapshot);
 	}
+}
+
+function timeoutForCommand(
+	command: BridgeCommand,
+	options: { requestTimeoutMs: number; menuRequestTimeoutMs: number },
+): number {
+	return command.cmd === "menu" ? options.menuRequestTimeoutMs : options.requestTimeoutMs;
 }

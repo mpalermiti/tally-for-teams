@@ -40,7 +40,7 @@ describe("site", () => {
 	});
 
 	it("serves a compact key strip on phones", () => {
-		expect(html).toContain('<source media="(max-width: 734px)" srcset="art/keys-compact.svg" width="720" height="420">');
+		expect(html).toContain('<source media="(max-width: 734px)" srcset="art/keys-compact.svg" width="720" height="640">');
 	});
 
 	it("runs no scripts (structured data for search engines is just JSON)", () => {
@@ -88,6 +88,15 @@ describe("site", () => {
 		expect(html).toContain('href="https://github.com/mpalermiti/tally-for-teams/releases/latest/download/Tally.streamDeckPlugin"');
 	});
 
+	it("markets v1.1 without adding external dependencies", () => {
+		expect(html).toContain("Ten keys. One rule.");
+		expect(html).toContain("Push to talk.");
+		expect(html).toContain("One-click setup.");
+		expect(html).toContain("Tally doesn't guess.");
+		expect(html).toContain("Stream Deck offers a ready-made Tally profile");
+		expect(html.match(/<article>/g)?.length).toBe(6);
+	});
+
 	it("keeps the page neutral outside the key art", () => {
 		expect(css).not.toMatch(/--action|#0066cc|#0071e3/i);
 		expect(css).toMatch(/a\s*\{\s*color:\s*inherit;\s*text-decoration:\s*none;\s*\}/);
@@ -104,6 +113,7 @@ describe("site", () => {
 		expect(css).toMatch(/h1[^{]*\{[^}]*text-wrap:\s*balance;/s);
 		expect(css).toMatch(/\.lede\s*\{[^}]*text-wrap:\s*balance;/s);
 		expect(css).toMatch(/h2\s*\{[^}]*text-wrap:\s*balance;/s);
+		expect(css).toMatch(/\.grid h3\s*\{[^}]*text-wrap:\s*balance;/s);
 		expect(css).toMatch(/\.why p, \.keys p, \.privacy p, \.caption, \.setup-note\s*\{[^}]*text-wrap:\s*balance;/s);
 	});
 });

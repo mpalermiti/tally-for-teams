@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { Snapshot } from "../src/teams/protocol";
 import { EMPTY_STATE, NO_PERMISSIONS, type MeetingPermissions, type MeetingState } from "../src/teams/protocol";
-import { KEY_KINDS, keySvg, muteDialFeedback, visualFor } from "../src/render/key";
+import { KEY_KINDS, keySvg, muteDialFeedback, timerFace, visualFor } from "../src/render/key";
 
 const ALL_ALLOWED = Object.fromEntries(Object.keys(NO_PERMISSIONS).map((k) => [k, true])) as unknown as MeetingPermissions;
 
@@ -37,6 +37,21 @@ describe("visualFor", () => {
 		expect(visualFor("hand", inMeeting({ isHandRaised: false })).tone).toBe("off");
 	});
 
+	it("renders unknown mic, camera, and share state as neutral ready keys with plain glyphs", () => {
+		expect(visualFor("mute", inMeeting({ isMuteKnown: false } as Partial<MeetingState>))).toMatchObject({
+			tone: "ready",
+			glyph: "mic",
+		});
+		expect(visualFor("camera", inMeeting({ isVideoKnown: false } as Partial<MeetingState>))).toMatchObject({
+			tone: "ready",
+			glyph: "video",
+		});
+		expect(visualFor("share", inMeeting({ isSharingKnown: false } as Partial<MeetingState>))).toMatchObject({
+			tone: "ready",
+			glyph: "screen-share",
+		});
+	});
+
 	it("goes idle when Teams says the control isn't available in this meeting", () => {
 		expect(visualFor("mute", inMeeting({}, { canToggleMute: false })).tone).toBe("idle");
 		expect(visualFor("camera", inMeeting({}, { canToggleVideo: false })).tone).toBe("idle");
@@ -66,6 +81,27 @@ describe("visualFor", () => {
 		expect(visualFor("share", inMeeting({ isSharing: true }, { canToggleShareTray: false })).tone).toBe("on");
 	});
 
+	it("shows People as a ready action only when the roster button is available", () => {
+		expect(visualFor("people", inMeeting()).tone).toBe("ready");
+		expect(visualFor("people", inMeeting({}, { canTogglePeople: false })).tone).toBe("idle");
+	});
+
+	it("shows Background blur as a neutral action unless a reliable blur state is known", () => {
+		expect(visualFor("blur", inMeeting())).toMatchObject({ tone: "ready", glyph: "blur" });
+		expect(visualFor("blur", inMeeting({ isBackgroundBlurKnown: true, isBackgroundBlurred: true } as Partial<MeetingState>))).toMatchObject({
+			tone: "on",
+			glyph: "blur",
+		});
+		expect(visualFor("blur", inMeeting({}, { canToggleBlur: false }))).toMatchObject({ tone: "idle", glyph: "blur" });
+	});
+
+	it("flags recording on the mic and camera keys only", () => {
+		const recording = inMeeting({ isRecording: true });
+		expect(visualFor("mute", recording).recording).toBe(true);
+		expect(visualFor("camera", recording).recording).toBe(true);
+		expect(visualFor("hand", recording).recording).toBe(false);
+		expect(visualFor("mute", inMeeting()).recording).toBe(false);
+	});
 });
 
 describe("keySvg", () => {
@@ -90,11 +126,33 @@ describe("keySvg", () => {
 		expect(svg).toContain('stroke="#1E1507"');
 	});
 
+	it("draws the recording badge on mic and camera faces only", () => {
+		const recording = inMeeting({ isRecording: true });
+		expect(keySvg(visualFor("mute", recording))).toContain('data-badge="recording"');
+		expect(keySvg(visualFor("camera", recording))).toContain('data-badge="recording"');
+		expect(keySvg(visualFor("hand", recording))).not.toContain("data-badge");
+		expect(keySvg(visualFor("mute", inMeeting()))).not.toContain("data-badge");
+	});
+
 	it("draws hold progress as a ring and a hint as a word under the glyph", () => {
 		const leave = visualFor("leave", inMeeting());
 		expect(keySvg(leave)).not.toContain("data-progress");
 		expect(keySvg(leave, { progress: 0.5 })).toContain('data-progress="0.50"');
 		expect(keySvg(leave, { hint: "Hold" })).toContain(">Hold</text>");
+	});
+});
+
+describe("timerFace", () => {
+	it("formats meeting duration as minutes, then hours", () => {
+		expect(timerFace(34, "ready")).toContain(">0:34<");
+		expect(timerFace(754, "ready")).toContain(">12:34<");
+		expect(timerFace(3_723, "ready")).toContain(">1:02:03<");
+	});
+
+	it("draws a neutral dash when no meeting timer is available", () => {
+		const face = timerFace(undefined, "idle");
+		expect(face).toContain(">—<");
+		expect(face).toContain('font-variant-numeric="tabular-nums"');
 	});
 });
 
@@ -106,10 +164,15 @@ describe("muteDialFeedback", () => {
 		expect(text(muteDialFeedback(inMeeting({ isMuted: true })))).toEqual(["Muted", "Hold to talk"]);
 	});
 
+	it("puts recording ahead of the hold hint", () => {
+		expect(text(muteDialFeedback(inMeeting({ isRecording: true })))).toEqual(["Live", "Recording"]);
+	});
+
 	it("explains why it's inactive", () => {
 		expect(text(muteDialFeedback({ ...offline, reason: "no-permission" }))).toEqual(["Allow", "Accessibility"]);
 		expect(text(muteDialFeedback({ ...offline, reason: "teams-not-running" }))).toEqual(["Teams", "Not running"]);
 		expect(text(muteDialFeedback({ ...offline, reason: "starting" }))).toEqual(["Teams", "Connecting"]);
+		expect(text(muteDialFeedback({ ...noMeeting, reason: "teams-changed" }))).toEqual(["Teams changed", "See README"]);
 		expect(text(muteDialFeedback(noMeeting))).toEqual(["Mic", "No meeting"]);
 		expect(text(muteDialFeedback(inMeeting({}, { canToggleMute: false })))).toEqual(["Mic", "Not available"]);
 	});
