@@ -338,8 +338,8 @@ async function main(): Promise<void> {
 		};
 		const onSigint = () => handleSignal("SIGINT", 130);
 		const onSigterm = () => handleSignal("SIGTERM", 143);
-		process.once("SIGINT", onSigint);
-		process.once("SIGTERM", onSigterm);
+		process.on("SIGINT", onSigint);
+		process.on("SIGTERM", onSigterm);
 		for (const shot of SHOTS) {
 			const tmpProfile = mkdtempSync(join(tmpdir(), CHROME_PROFILE_PREFIX));
 			tempProfiles.add(tmpProfile);
